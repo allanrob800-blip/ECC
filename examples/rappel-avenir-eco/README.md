@@ -62,6 +62,15 @@ node display/build.js "https://script.google.com/.../exec?src=avenir-eco" --out 
 
 `build.js` demande `playwright-core` (non installé par `npm install`, car il ne sert qu'à produire le PDF) et un Chromium. Il écrit `presentoir.pdf` (2 pages), `apercu-recto.png`, `apercu-verso.png` et `qr.svg`, et refuse un QR trop dense pour sa taille. Les images Octopus (mascotte, logo) ne sont pas versionnées : le dossier `display/assets/` est ignoré par git.
 
+Deux PDF sont produits : `presentoir.pdf` (111 × 156 mm, 3 mm de fond perdu, pour un imprimeur) et `presentoir-maison-A4.pdf` (2 pages A4, carte à l'échelle 1:1, repères de coupe et règle de contrôle de 10 cm, pour une impression à la maison).
+
+Impression à la maison :
+
+1. Imprimer en **taille réelle / 100 %**, jamais « ajuster à la page » ni « adapter ».
+2. Mesurer la règle de contrôle au bas de la page : elle doit faire 10 cm. Sinon, le réglage d'échelle de l'impression est faux.
+3. Papier épais (250 à 300 g/m²), d'abord un essai sur papier ordinaire.
+4. Découper sur les repères : la zone de fond perdu (3 mm) déborde et doit être coupée. Recto-verso : retourner la feuille sur le bord long, ou coller les deux faces.
+
 Avant d'imprimer : ouvrez le lien du QR dans une fenêtre de navigation privée, sur un téléphone non connecté à un compte Octopus. S'il demande une connexion, personne d'autre que vous ne pourra l'ouvrir.
 
 ## Limites à connaître
