@@ -274,9 +274,10 @@ function sendMail_(to, mail, replyTo) {
     subject: mail.subject,
     body: mail.text,
     htmlBody: mail.html,
-    name: 'Rappel ' + PROFILE.name
+    name: mail.name || 'Rappel ' + PROFILE.name
   };
   if (replyTo) options.replyTo = replyTo;
+  if (mail.inlineImages && hasImages_(mail.inlineImages)) options.inlineImages = mail.inlineImages;
   MailApp.sendEmail(options);
 }
 
@@ -284,74 +285,224 @@ function sendMail_(to, mail, replyTo) {
 // E-mails
 // ---------------------------------------------------------------------------
 
+/** Noms d'expéditeur affichés dans la boîte de réception (la photo de profil vient du compte Google d'envoi). */
+const SENDER_NAME_OWNER = 'Octopus Rappel';
+const SENDER_NAME_PARTNER = 'Allan Fix · Octopus Energy';
+
+const SLOT_BANNER = {
+  asap: 'Dès que possible',
+  morning: 'Ce matin · 9h–12h',
+  afternoon: 'Cet après-midi · 14h–17h',
+  evening: 'Fin de journée · après 17h'
+};
+const SLOT_SHORT = { asap: 'dès que possible', morning: 'ce matin', afternoon: 'cet après-midi', evening: 'fin de journée' };
+
+const MAIL_FONT = 'Helvetica,Arial,sans-serif';
+
 function escapeHtml_(value) {
   return String(value).replace(/[&<>"']/g, function (ch) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }[ch];
   });
 }
 
-/** Date en français, fuseau Paris, sans dépendre d'Intl : « dimanche 11 octobre 2026 à 12:37 ». */
-function formatDateFr_(iso) {
+/**
+ * Date en français, fuseau Paris, sans dépendre d'Intl : « dimanche 11 octobre 2026 à 12:37 »,
+ * ou sans l'année (withYear = false) : « dimanche 11 octobre à 12:37 ».
+ */
+function formatDateFr_(iso, withYear) {
   const date = new Date(iso);
   const day = Number(Utilities.formatDate(date, TIMEZONE, 'u'));
   const month = Number(Utilities.formatDate(date, TIMEZONE, 'M'));
-  return DAYS_FR[day - 1] + ' ' + Utilities.formatDate(date, TIMEZONE, 'd') + ' ' + MONTHS_FR[month - 1] + ' ' +
-    Utilities.formatDate(date, TIMEZONE, 'yyyy') + ' à ' + Utilities.formatDate(date, TIMEZONE, 'HH:mm');
+  const year = withYear === false ? '' : ' ' + Utilities.formatDate(date, TIMEZONE, 'yyyy');
+  return DAYS_FR[day - 1] + ' ' + Utilities.formatDate(date, TIMEZONE, 'd') + ' ' + MONTHS_FR[month - 1] + year +
+    ' à ' + Utilities.formatDate(date, TIMEZONE, 'HH:mm');
 }
 
 function fullName_(lead) {
   return [lead.firstName, lead.lastName].filter(Boolean).join(' ');
 }
 
-function table_(rows) {
-  const body = rows.map(function (row) {
-    return '<tr><td style="padding:4px 12px 4px 0;color:#555">' + escapeHtml_(row[0]) +
-      '</td><td style="padding:4px 0"><strong>' + escapeHtml_(row[1]) + '</strong></td></tr>';
-  }).join('');
-  return '<table style="font-family:Arial,sans-serif;font-size:15px">' + body + '</table>';
+/**
+ * Images des e-mails, envoyées en pièces jointes en ligne (Gmail n'affiche pas les images « data: »).
+ * Chaque image est facultative : si son fichier (OctopusAssets.gs) est absent, l'e-mail s'en passe.
+ */
+function emailImages_(wanted) {
+  const sources = {
+    mascot: typeof OCTOPUS_MASCOT_PNG_BASE64 !== 'undefined' ? ['image/png', 'mascot.png', OCTOPUS_MASCOT_PNG_BASE64] : null,
+    wordmark: typeof OCTOPUS_WORDMARK_PNG_BASE64 !== 'undefined' ? ['image/png', 'octopus-energy.png', OCTOPUS_WORDMARK_PNG_BASE64] : null,
+    avenir: typeof AVENIR_ECO_LOGO_EMAIL_DATA_URI !== 'undefined' ? ['image/jpeg', 'avenir-eco.jpg', AVENIR_ECO_LOGO_EMAIL_DATA_URI.split(',')[1]] : null
+  };
+  const images = {};
+  wanted.forEach(function (key) {
+    const source = sources[key];
+    if (source) images[key] = Utilities.newBlob(Utilities.base64Decode(source[2]), source[0], source[1]);
+  });
+  return images;
 }
 
-function plain_(rows) {
-  return rows.map(function (row) { return row[0] + ' : ' + row[1]; }).join('\n');
+function hasImages_(images) {
+  return Object.keys(images).length > 0;
 }
 
-/** E-mail complet pour le conseiller. */
+function smsLink_(lead) {
+  const text = 'Bonjour ' + lead.firstName + ', c\'est ' + PROFILE.firstName + ' d\'Octopus Energy. ' +
+    'Je viens d\'essayer de vous joindre suite à votre demande de rappel. Quand puis-je vous appeler ?';
+  return 'sms:' + lead.phone + '?&body=' + encodeURIComponent(text);
+}
+
+/** Bouton d'e-mail (tableau + lien, compatible Gmail, Outlook et Apple Mail). */
+function button_(href, label, style) {
+  return '<a href="' + href + '" style="display:block;text-decoration:none;font-weight:bold;text-align:center;' + style + '">' + label + '</a>';
+}
+
+/** E-mail pour le conseiller : sombre, créneau en évidence, boutons Appeler / SMS / Écrire. */
 function buildOwnerMail(lead, partnerLabel) {
-  const origin = partnerLabel || (lead.source === 'direct' ? 'Accès direct' : lead.source);
-  const rows = [
-    ['Nom', fullName_(lead)],
-    ['Téléphone', formatPhone(lead.phone)],
-    ['E-mail', lead.email || 'non renseigné'],
-    ['Créneau souhaité', SLOTS[lead.slot]],
-    ['Origine', origin],
-    ['Reçu le', formatDateFr_(lead.createdAt)]
+  const images = emailImages_(partnerLabel ? ['mascot', 'avenir'] : ['mascot']);
+  const name = escapeHtml_(fullName_(lead));
+  const first = escapeHtml_(lead.firstName);
+  const phoneDisplay = formatPhone(lead.phone);
+  const received = formatDateFr_(lead.createdAt);
+  const receivedShort = formatDateFr_(lead.createdAt, false);
+  const origin = partnerLabel ? 'Stand ' + partnerLabel : 'Accès direct';
+  const banner = SLOT_BANNER[lead.slot];
+  const via = partnerLabel ? ' via ' + partnerLabel : '';
+  const subject = '🔥 Nouveau lead' + via + ' · ' + lead.firstName + ' · ' + SLOT_SHORT[lead.slot];
+  const hours = banner.split(' · ')[1];
+  const preheader = 'À rappeler ' + SLOT_SHORT[lead.slot] + (hours ? ' (' + hours + ')' : '') + ' · ' + phoneDisplay;
+
+  const mascot = images.mascot
+    ? '<tr><td align="center" style="padding:2px 0 10px;"><img src="cid:mascot" width="64" alt="" style="display:block;height:auto;"></td></tr>'
+    : '';
+  const viaBlock = partnerLabel
+    ? '<tr><td align="center" style="padding-bottom:18px;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>' +
+      '<td style="color:#949FFF;font-size:13px;padding-right:10px;font-family:' + MAIL_FONT + ';">via le stand</td>' +
+      '<td>' + (images.avenir
+        ? '<img src="cid:avenir" width="46" height="46" alt="' + escapeHtml_(partnerLabel) + '" style="display:block;border-radius:10px;">'
+        : '<span style="display:block;background:#FFFFFF;color:#0B1D18;font-weight:bold;font-size:14px;border-radius:10px;padding:10px 12px;font-family:' + MAIL_FONT + ';">' + escapeHtml_(partnerLabel) + '</span>') +
+      '</td></tr></table></td></tr>'
+    : '<tr><td style="height:12px;line-height:12px;font-size:12px;">&nbsp;</td></tr>';
+  const emailRow = lead.email
+    ? '<tr><td style="color:#949FFF;font-size:12px;width:96px;padding:11px 0 4px;vertical-align:top;">E-mail</td>' +
+      '<td style="color:#F0FFFF;font-size:14px;padding:11px 0 4px;"><a href="mailto:' + escapeHtml_(lead.email) + '" style="color:#F0FFFF;">' + escapeHtml_(lead.email) + '</a></td></tr>'
+    : '';
+  const secondary = lead.email
+    ? '<td width="49%" align="center">' + button_(smsLink_(lead), '💬&nbsp; SMS prérempli', 'border:2px solid #60F0F8;color:#60F0F8;font-size:14px;padding:12px 6px;border-radius:12px;') + '</td>' +
+      '<td width="2%">&nbsp;</td>' +
+      '<td width="49%" align="center">' + button_('mailto:' + escapeHtml_(lead.email), '✉️&nbsp; Écrire', 'border:2px solid #60F0F8;color:#60F0F8;font-size:14px;padding:12px 6px;border-radius:12px;') + '</td>'
+    : '<td align="center">' + button_(smsLink_(lead), '💬&nbsp; SMS prérempli', 'border:2px solid #60F0F8;color:#60F0F8;font-size:14px;padding:12px 6px;border-radius:12px;') + '</td>';
+
+  const html =
+    '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">' + escapeHtml_(preheader) + '</div>' +
+    '<div style="background:#100030;padding:24px 12px 28px;font-family:' + MAIL_FONT + ';">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;">' +
+    mascot +
+    '<tr><td align="center" style="color:#60F0F8;font-size:22px;font-weight:bold;line-height:1.2;padding-bottom:10px;">Nouvelle demande de rappel</td></tr>' +
+    viaBlock +
+    '<tr><td style="background:#60F0F8;border-radius:14px;padding:14px 18px;" align="center">' +
+    '<div style="color:#100030;font-size:11px;font-weight:bold;letter-spacing:1.5px;">À RAPPELER</div>' +
+    '<div style="color:#100030;font-size:20px;font-weight:bold;line-height:1.25;padding-top:2px;">' + escapeHtml_(banner) + '</div></td></tr>' +
+    '<tr><td style="height:12px;line-height:12px;font-size:12px;">&nbsp;</td></tr>' +
+    '<tr><td style="background:#2D1A83;border-radius:16px;padding:22px 22px 8px;">' +
+    '<div style="color:#F0FFFF;font-size:22px;font-weight:bold;line-height:1.2;">' + name + '</div>' +
+    '<div style="padding:6px 0 16px;"><a href="tel:' + lead.phone + '" style="color:#60F0F8;font-size:25px;font-weight:bold;text-decoration:none;">' + phoneDisplay + '</a></div>' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #4B35A8;">' +
+    emailRow +
+    '<tr><td style="color:#949FFF;font-size:12px;width:96px;padding:4px 0;vertical-align:top;">Origine</td><td style="color:#F0FFFF;font-size:14px;padding:4px 0;">' + escapeHtml_(origin) + '</td></tr>' +
+    '<tr><td style="color:#949FFF;font-size:12px;padding:4px 0 14px;vertical-align:top;">Reçu le</td><td style="color:#F0FFFF;font-size:14px;padding:4px 0 14px;">' + escapeHtml_(receivedShort) + '</td></tr>' +
+    '</table></td></tr>' +
+    '<tr><td align="center" style="padding:18px 0 10px;">' + button_('tel:' + lead.phone, '📞&nbsp; Appeler ' + first, 'background:#F050F8;color:#100030;font-size:17px;padding:16px 10px;border-radius:14px;') + '</td></tr>' +
+    '<tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' + secondary + '</tr></table></td></tr>' +
+    '<tr><td align="center" style="color:#949FFF;font-size:11px;line-height:1.7;padding-top:20px;">✅ Consentement recueilli le ' + escapeHtml_(received) + '<br>Données conservées 12 mois · Octopus Energy</td></tr>' +
+    '</table></div>';
+
+  const lines = [
+    'NOUVELLE DEMANDE DE RAPPEL' + (partnerLabel ? ' (' + origin + ')' : ''),
+    'À rappeler : ' + banner,
+    '',
+    fullName_(lead) + ' : ' + phoneDisplay,
+    lead.email ? 'E-mail : ' + lead.email : 'E-mail : non renseigné',
+    'Origine : ' + origin,
+    'Reçu le : ' + received,
+    '',
+    'Consentement recueilli le ' + received + '. Données conservées 12 mois.'
   ];
   return {
-    subject: 'Nouvelle demande de rappel : ' + fullName_(lead) + ' (' + origin + ')',
-    text: 'Nouvelle demande de rappel.\n\n' + plain_(rows) + '\n',
-    html: '<p style="font-family:Arial,sans-serif">Nouvelle demande de rappel.</p>' + table_(rows)
+    subject: subject,
+    text: lines.join('\n') + '\n',
+    html: html,
+    name: SENDER_NAME_OWNER,
+    inlineImages: images
   };
 }
 
 /**
- * E-mail pour le contact du partenaire. Par défaut : prénom, créneau et heure
- * seulement, sans téléphone ni e-mail (minimisation des données, RGPD).
+ * E-mail pour le contact du partenaire : clair, aux couleurs du partenaire. Par défaut : prénom, créneau
+ * et heure seulement, sans téléphone ni e-mail du client (minimisation des données, RGPD).
  */
 function buildPartnerMail(lead, partnerLabel, shareContact) {
-  const rows = [
-    ['Prénom', lead.firstName],
-    ['Créneau souhaité', SLOTS[lead.slot]],
-    ['Reçu le', formatDateFr_(lead.createdAt)]
-  ];
+  const images = emailImages_(['avenir', 'wordmark']);
+  const first = escapeHtml_(lead.firstName);
+  const received = formatDateFr_(lead.createdAt, false);
+  const label = escapeHtml_(partnerLabel);
+  const subject = '📍 Un client de votre stand veut être rappelé · ' + lead.firstName;
+  const slotLine = SLOT_BANNER[lead.slot].replace(' · ', ' (') + (SLOT_BANNER[lead.slot].indexOf(' · ') > -1 ? ')' : '');
+
+  const rows = [['Prénom', lead.firstName], ['Rappel souhaité', slotLine]];
   if (shareContact) {
-    rows.splice(1, 0, ['Téléphone', formatPhone(lead.phone)]);
-    if (lead.email) rows.splice(2, 0, ['E-mail', lead.email]);
+    rows.push(['Téléphone', formatPhone(lead.phone)]);
+    if (lead.email) rows.push(['E-mail', lead.email]);
   }
-  const intro = 'Un client de votre stand ' + partnerLabel + ' vient de demander à être rappelé par ' + PROFILE.name + '.';
+  rows.push(['Reçu le', received]);
+  const rowsHtml = rows.map(function (row, index) {
+    const top = index === 0 ? '14px' : '5px';
+    const bottom = index === rows.length - 1 ? '14px' : '5px';
+    return '<tr><td style="color:#5C6B64;font-size:12px;width:120px;padding:' + top + ' 0 ' + bottom + ' 16px;vertical-align:top;">' + escapeHtml_(row[0]) + '</td>' +
+      '<td style="color:#0B1D18;font-size:14px;font-weight:bold;padding:' + top + ' 16px ' + bottom + ' 0;">' + escapeHtml_(row[1]) + '</td></tr>';
+  }).join('');
+
+  const avenir = images.avenir
+    ? '<td><img src="cid:avenir" width="48" height="48" alt="' + label + '" style="display:block;border-radius:10px;"></td>'
+    : '<td style="color:#FFFFFF;font-size:18px;font-weight:bold;font-family:' + MAIL_FONT + ';">' + label + '</td>';
+  const wordmark = images.wordmark
+    ? '<td><img src="cid:wordmark" width="128" alt="Octopus Energy" style="display:block;height:auto;"></td>'
+    : '<td style="color:#FFFFFF;font-size:18px;font-weight:bold;font-family:' + MAIL_FONT + ';">Octopus Energy</td>';
+
+  const html =
+    '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">' + escapeHtml_(PROFILE.name) + ' (Octopus Energy) a été prévenu. Rien à faire de votre côté.</div>' +
+    '<div style="background:#EEF2E3;padding:24px 12px;font-family:' + MAIL_FONT + ';">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#FFFFFF;border-radius:16px;">' +
+    '<tr><td style="background:#0B1D18;border-radius:16px 16px 0 0;padding:16px 20px;" align="center"><table role="presentation" cellpadding="0" cellspacing="0"><tr>' +
+    avenir + '<td style="color:#90AD03;font-size:20px;padding:0 14px;">×</td>' + wordmark + '</tr></table></td></tr>' +
+    '<tr><td style="padding:26px 24px 8px;">' +
+    '<div style="color:#5F7400;font-size:11px;font-weight:bold;letter-spacing:1.5px;">NOUVEAU LEAD DEPUIS VOTRE STAND</div>' +
+    '<div style="color:#0B1D18;font-size:25px;font-weight:bold;line-height:1.2;padding:8px 0 10px;">Un client veut être rappelé</div>' +
+    '<div style="color:#33423D;font-size:15px;line-height:1.55;"><b>' + first + '</b> vient de laisser ses coordonnées en scannant le QR code de votre stand. <b>' + escapeHtml_(PROFILE.name) + '</b>, conseiller Octopus&nbsp;Energy, a été prévenu et rappellera ce client rapidement.</div></td></tr>' +
+    '<tr><td style="padding:14px 24px 6px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F7EA;border-radius:12px;">' + rowsHtml + '</table></td></tr>' +
+    '<tr><td style="padding:10px 24px 4px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="30" valign="top" style="color:#5F7400;font-size:20px;line-height:1.2;">✔</td>' +
+    '<td style="color:#0B1D18;font-size:15px;line-height:1.5;"><b>Rien à faire de votre côté.</b><br><span style="color:#33423D;font-size:14px;">' + escapeHtml_(PROFILE.firstName) + ' s’occupe de tout. Une question sur ce lead ? Vous pouvez l’appeler directement.</span></td></tr></table></td></tr>' +
+    '<tr><td style="padding:16px 24px 6px;">' + button_('tel:' + PROFILE.phone, '📞&nbsp; Appeler ' + escapeHtml_(PROFILE.firstName) + ' · ' + formatPhone(PROFILE.phone), 'background:#90AD03;color:#0B1D18;font-size:16px;padding:15px 10px;border-radius:999px;') + '</td></tr>' +
+    '<tr><td style="padding:14px 24px 22px;color:#7A867F;font-size:11px;line-height:1.6;" align="center">' +
+    (shareContact ? '' : 'Par respect de la vie privée de ce client, ses coordonnées ne sont pas transmises dans ce message.<br>') +
+    'Message automatique · Service de rappel d’' + escapeHtml_(PROFILE.name) + ', Octopus Energy</td></tr>' +
+    '</table></div>';
+
+  const lines = [
+    'UN CLIENT DE VOTRE STAND ' + partnerLabel.toUpperCase() + ' VEUT ÊTRE RAPPELÉ',
+    '',
+    lead.firstName + ' vient de laisser ses coordonnées en scannant le QR code de votre stand.',
+    PROFILE.name + ', conseiller Octopus Energy, a été prévenu et rappellera ce client rapidement. Rien à faire de votre côté.',
+    ''
+  ].concat(rows.map(function (row) { return row[0] + ' : ' + row[1]; })).concat([
+    '',
+    'Une question sur ce lead ? ' + PROFILE.firstName + ' : ' + formatPhone(PROFILE.phone),
+    shareContact ? '' : 'Par respect de la vie privée de ce client, ses coordonnées ne sont pas transmises dans ce message.'
+  ]);
   return {
-    subject: 'Nouveau lead depuis votre stand : ' + lead.firstName,
-    text: intro + '\n\n' + plain_(rows) + '\n',
-    html: '<p style="font-family:Arial,sans-serif">' + escapeHtml_(intro) + '</p>' + table_(rows)
+    subject: subject,
+    text: lines.join('\n') + '\n',
+    html: html,
+    name: SENDER_NAME_PARTNER,
+    inlineImages: images
   };
 }
 

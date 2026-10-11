@@ -143,7 +143,13 @@ function createGoogleEnvironment(options = {}) {
       })
     },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-    Utilities: { formatDate, getUuid: () => crypto.randomUUID(), sleep() {} },
+    Utilities: {
+      formatDate,
+      getUuid: () => crypto.randomUUID(),
+      sleep() {},
+      base64Decode: text => [...Buffer.from(text, 'base64')],
+      newBlob: (bytes, contentType, name) => ({ bytes: Buffer.from(bytes), contentType, name, getName: () => name })
+    },
     MailApp: {
       getRemainingDailyQuota: () => state.quota,
       sendEmail(message) {
@@ -206,7 +212,8 @@ function createGoogleEnvironment(options = {}) {
 
   const context = vm.createContext(env);
   // Tous les fichiers .gs partagent la même portée globale, comme dans Apps Script.
-  for (const file of fs.readdirSync(SCRIPT_DIR).filter(name => name.endsWith('.gs')).sort()) {
+  const skip = options.skipFiles || [];
+  for (const file of fs.readdirSync(SCRIPT_DIR).filter(name => name.endsWith('.gs') && !skip.includes(name)).sort()) {
     vm.runInContext(fs.readFileSync(path.join(SCRIPT_DIR, file), 'utf8'), context, { filename: file });
   }
 

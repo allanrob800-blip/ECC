@@ -12,13 +12,24 @@ Tout tourne dans Google Apps Script : gratuit, sans hébergeur ni nom de domaine
 - Un lead est écrit dans le Sheet avant l'envoi des e-mails. Le client voit un succès si le lead est enregistré ou si l'e-mail au conseiller est parti. Les colonnes « Mail conseiller » et « Mail partenaire » du Sheet indiquent `sent`, `failed` ou `no-address`.
 - Les leads de plus de 12 mois sont supprimés chaque nuit, comme annoncé aux clients.
 
+## E-mails
+
+Chaque demande envoie deux e-mails HTML (avec version texte) :
+
+- **Au conseiller** (nom d'expéditeur « Octopus Rappel ») : objet « 🔥 Nouveau lead via Avenir Eco · Julie · cet après-midi », créneau à rappeler en évidence, numéro cliquable, boutons Appeler, SMS prérempli et Écrire, consentement horodaté.
+- **Au contact du partenaire** (nom d'expéditeur « Allan Fix · Octopus Energy ») : version claire aux couleurs du partenaire, prénom et créneau seulement, avec un bouton pour appeler le conseiller.
+
+Les images (mascotte, logo « octopus energy », logo du partenaire) sont jointes en ligne : Gmail n'affiche pas les images « data: ». Mascotte et logo texte sont dans `OctopusAssets.gs`, un fichier **facultatif et non versionné** (marque Octopus) : sans lui, les e-mails s'affichent sans mascotte et avec « Octopus Energy » en texte.
+
+**Photo de profil** : l'avatar d'un e-mail dans Gmail est la photo du compte Google d'envoi, pas du code. Pour y afficher la mascotte, utilisez un compte Google dédié au service et mettez-y la mascotte comme photo de profil. Gmail affiche en général cet avatar ; Outlook et Apple Mail montrent souvent une initiale.
+
 ## Mise en ligne, pas à pas
 
 Les écrans de Google changent parfois de libellé : suivez l'esprit des étapes.
 
 1. Avec le compte Google qui enverra les e-mails, ouvrez <https://script.google.com> et créez un projet.
 2. Dans l'éditeur, remplacez le contenu de `Code.gs` par celui de `apps-script/Code.gs`.
-3. Créez trois fichiers HTML nommés exactement `index`, `style` et `app` (bouton `+`, puis HTML) et collez-y `apps-script/index.html`, `style.html` et `app.html`. Créez aussi un fichier **Script** (bouton `+`, puis Script) nommé `Logo` et collez-y `apps-script/Logo.gs`.
+3. Créez trois fichiers HTML nommés exactement `index`, `style` et `app` (bouton `+`, puis HTML) et collez-y `apps-script/index.html`, `style.html` et `app.html`. Créez aussi un fichier **Script** (bouton `+`, puis Script) nommé `Logo` et collez-y `apps-script/Logo.gs`. Facultatif : un fichier Script `OctopusAssets` (mascotte et logo texte pour les e-mails, fourni à part).
 4. Dans « Paramètres du projet » (la roue dentée), cochez « Afficher le fichier manifeste appsscript.json dans l'éditeur », puis collez-y `apps-script/appsscript.json`.
 5. Toujours dans « Paramètres du projet », section « Propriétés du script », ajoutez :
    - `OWNER_EMAIL` : votre adresse de réception des leads ;

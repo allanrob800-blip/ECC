@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+/* global document */
+
 /**
  * Génère le présentoir (recto avec QR code, verso avec le numéro du conseiller).
  *

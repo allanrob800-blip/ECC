@@ -87,7 +87,7 @@ test('un lead Avenir Eco est écrit dans le Sheet et notifie le conseiller ET le
   const partner = mailsTo(gas, 'contact@avenir.test')[0];
   assert.match(owner.body, /06 12 34 56 78/);
   assert.equal(owner.replyTo, 'julie@example.test');
-  assert.match(partner.subject, /Nouveau lead/);
+  assert.match(partner.subject, /Un client de votre stand veut être rappelé · Julie/);
   assert.equal(partner.replyTo, 'allan@example.test');
 });
 
@@ -363,4 +363,124 @@ test('aucun lien ne pousse le client à souscrire seul : ni sur la page, ni dans
     const success = html.slice(html.indexOf('id="success-panel"'), html.indexOf('<div class="bar"'));
     assert.equal([...success.matchAll(/<a\s/g)].length, 0, 'la confirmation ne contient aucun lien');
   }
+});
+
+// --- e-mails : fond et forme --------------------------------------------------
+
+const ownerOf = gas => gas.state.sent.find(m => m.to.includes('allan@example.test'));
+const partnerOf = gas => gas.state.sent.find(m => m.to.includes('contact@avenir.test'));
+const keys = images => JSON.parse(JSON.stringify(Object.keys(images || {}))).sort();
+
+test('objets et noms d\'expéditeur : le prénom et le créneau se lisent avant d\'ouvrir', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead());
+  gas.call('submitCallback', lead({ source: 'direct', phone: '0611111111', slot: 'asap' }));
+  const [viaPartner, direct] = gas.state.sent.filter(m => m.to.includes('allan@example.test'));
+  assert.equal(viaPartner.subject, '🔥 Nouveau lead via Avenir Eco · Julie · cet après-midi');
+  assert.equal(direct.subject, '🔥 Nouveau lead · Julie · dès que possible');
+  assert.equal(viaPartner.name, 'Octopus Rappel');
+  assert.equal(partnerOf(gas).name, 'Allan Fix · Octopus Energy');
+});
+
+test('e-mail du conseiller : créneau en évidence, numéro cliquable, boutons Appeler / SMS / Écrire', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead());
+  const { htmlBody, body } = ownerOf(gas);
+  assert.match(htmlBody, /À RAPPELER/);
+  assert.match(htmlBody, /Cet après-midi · 14h–17h/);
+  assert.match(htmlBody, /href="tel:\+33612345678"[^>]*>06 12 34 56 78</);
+  assert.match(htmlBody, /Appeler Julie/);
+  assert.match(htmlBody, /href="mailto:julie@example\.test"/);
+  const sms = /href="(sms:\+33612345678\?&body=[^"]+)"/.exec(htmlBody);
+  assert.ok(sms, 'lien SMS présent');
+  assert.equal(decodeURIComponent(sms[1].split('&body=')[1]),
+    'Bonjour Julie, c\'est Allan d\'Octopus Energy. Je viens d\'essayer de vous joindre suite à votre demande de rappel. Quand puis-je vous appeler ?');
+  assert.match(htmlBody, /via le stand/);
+  assert.match(body, /À rappeler : Cet après-midi · 14h–17h/);
+  assert.match(body, /Julie Martin : 06 12 34 56 78/);
+  assert.doesNotMatch(htmlBody + body, /Référence|Réf\./);
+});
+
+test('sans e-mail du client : pas de ligne E-mail ni de bouton « Écrire », le SMS reste', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead({ email: '' }));
+  const { htmlBody, body } = ownerOf(gas);
+  assert.doesNotMatch(htmlBody, /mailto:|Écrire/);
+  assert.match(htmlBody, /SMS prérempli/);
+  assert.match(body, /E-mail : non renseigné/);
+});
+
+test('accès direct : pas de mention « via le stand » ni de logo partenaire dans l\'e-mail du conseiller', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead({ source: 'direct' }));
+  const message = ownerOf(gas);
+  assert.doesNotMatch(message.htmlBody, /via le stand|cid:avenir/);
+  assert.match(message.htmlBody, /Accès direct/);
+  assert.deepEqual(keys(message.inlineImages), ['mascot']);
+});
+
+test('e-mail du partenaire : prénom et créneau, jamais les coordonnées du client, numéro d\'Allan pour le joindre', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead());
+  const { htmlBody, body } = partnerOf(gas);
+  for (const text of [htmlBody, body]) {
+    assert.doesNotMatch(text, /06 12 34 56 78|\+33612345678|julie@example\.test|Martin/);
+    assert.match(text, /Julie/);
+    assert.match(text, /Cet après-midi \(14h–17h\)/);
+  }
+  assert.match(htmlBody, /href="tel:\+33685740141"/);
+  assert.match(htmlBody, /06 85 74 01 41/);
+  assert.match(htmlBody, /Rien à faire de votre côté/);
+  assert.match(htmlBody, /ses coordonnées ne sont pas transmises/);
+  assert.doesNotMatch(htmlBody + body, /Référence|Réf\./);
+});
+
+test('PARTNER_SHARE_CONTACT=1 : téléphone et e-mail du client ajoutés, la mention de confidentialité disparaît', () => {
+  const gas = ready({ props: { PARTNER_SHARE_CONTACT: '1' } });
+  gas.call('submitCallback', lead());
+  const { htmlBody } = partnerOf(gas);
+  assert.match(htmlBody, /06 12 34 56 78/);
+  assert.match(htmlBody, /julie@example\.test/);
+  assert.doesNotMatch(htmlBody, /ne sont pas transmises/);
+});
+
+test('images : jamais d\'URI « data: » dans l\'e-mail (Gmail les bloque), et chaque cid: a son image JPEG ou PNG', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead());
+  for (const message of [ownerOf(gas), partnerOf(gas)]) {
+    assert.doesNotMatch(message.htmlBody, /src="data:/);
+    const used = [...message.htmlBody.matchAll(/src="cid:([a-z]+)"/g)].map(m => m[1]);
+    assert.ok(used.length > 0);
+    for (const cid of used) {
+      const blob = message.inlineImages[cid];
+      assert.ok(blob, `image ${cid} fournie`);
+      const head = [...blob.bytes.subarray(0, 4)];
+      assert.ok((head[0] === 0xff && head[1] === 0xd8) || (head[0] === 0x89 && head[1] === 0x50), `${cid} est un JPEG ou un PNG`);
+      assert.ok(blob.bytes.length < 40000, `${cid} reste légère`);
+    }
+  }
+  assert.deepEqual(keys(ownerOf(gas).inlineImages), ['avenir', 'mascot']);
+  assert.deepEqual(keys(partnerOf(gas).inlineImages), ['avenir', 'wordmark']);
+});
+
+test('sans le fichier OctopusAssets.gs : pas d\'image cassée, « Octopus Energy » en texte, le logo partenaire reste', () => {
+  const gas = createGoogleEnvironment({ skipFiles: ['OctopusAssets.gs'] });
+  gas.call('setup');
+  gas.call('submitCallback', lead());
+  const owner = ownerOf(gas);
+  const partner = partnerOf(gas);
+  assert.doesNotMatch(owner.htmlBody, /cid:mascot/);
+  assert.doesNotMatch(partner.htmlBody, /cid:wordmark/);
+  assert.match(partner.htmlBody, />Octopus Energy</);
+  assert.deepEqual(keys(owner.inlineImages), ['avenir']);
+  assert.deepEqual(keys(partner.inlineImages), ['avenir']);
+});
+
+test('tout ce qui vient du client est échappé dans les e-mails (nom, e-mail)', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead({ firstName: '<img src=x onerror=alert(1)>', lastName: '"><script>x</script>' }));
+  for (const message of gas.state.sent) {
+    assert.doesNotMatch(message.htmlBody, /<img src=x|<script>x/);
+  }
+  assert.match(ownerOf(gas).htmlBody, /&lt;img src=x/);
 });
