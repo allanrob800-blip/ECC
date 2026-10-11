@@ -7,7 +7,7 @@ Tout tourne dans Google Apps Script : gratuit, sans hébergeur ni nom de domaine
 ## Fonctionnement
 
 - `<url de l'application>?src=avenir-eco` : le paramètre `src` identifie l'origine du lead. Une source qui commence par `avenir-eco` (par exemple `avenir-eco-rennes`) déclenche l'e-mail au partenaire. Sans `src`, la source est `direct` et seul le conseiller est prévenu.
-- Sur un QR du partenaire, la page affiche « En partenariat avec » et son logo, cite son nom dans le texte d'introduction et dans la phrase de consentement. Sur un accès direct ou une autre source, rien n'est affiché à son sujet. Le logo vient du site d'Avenir Eco ; si l'image ne charge pas, son nom s'affiche en texte. Pour changer l'adresse du logo, ajoutez la propriété `AVENIR_ECO_LOGO_URL` (https uniquement).
+- Sur un QR du partenaire, la page affiche « En partenariat avec » et son logo, cite son nom dans le texte d'introduction et dans la phrase de consentement. Sur un accès direct ou une autre source, rien n'est affiché à son sujet. Le logo est intégré à la page (fichier `Logo.gs`), donc il ne dépend d'aucun site externe. Pour le remplacer par une image en ligne, ajoutez la propriété `AVENIR_ECO_LOGO_URL` (https uniquement) ; si cette image ne charge pas, le nom s'affiche en texte.
 - Le partenaire reçoit par défaut le prénom, le créneau et l'heure, sans téléphone ni e-mail du client (propriété `PARTNER_SHARE_CONTACT` pour changer).
 - Un lead est écrit dans le Sheet avant l'envoi des e-mails. Le client voit un succès si le lead est enregistré ou si l'e-mail au conseiller est parti. Les colonnes « Mail conseiller » et « Mail partenaire » du Sheet indiquent `sent`, `failed` ou `no-address`.
 - Les leads de plus de 12 mois sont supprimés chaque nuit, comme annoncé aux clients.
@@ -18,17 +18,17 @@ Les écrans de Google changent parfois de libellé : suivez l'esprit des étapes
 
 1. Avec le compte Google qui enverra les e-mails, ouvrez <https://script.google.com> et créez un projet.
 2. Dans l'éditeur, remplacez le contenu de `Code.gs` par celui de `apps-script/Code.gs`.
-3. Créez trois fichiers HTML nommés exactement `index`, `style` et `app` (bouton `+`, puis HTML) et collez-y `apps-script/index.html`, `style.html` et `app.html`.
+3. Créez trois fichiers HTML nommés exactement `index`, `style` et `app` (bouton `+`, puis HTML) et collez-y `apps-script/index.html`, `style.html` et `app.html`. Créez aussi un fichier **Script** (bouton `+`, puis Script) nommé `Logo` et collez-y `apps-script/Logo.gs`.
 4. Dans « Paramètres du projet » (la roue dentée), cochez « Afficher le fichier manifeste appsscript.json dans l'éditeur », puis collez-y `apps-script/appsscript.json`.
 5. Toujours dans « Paramètres du projet », section « Propriétés du script », ajoutez :
    - `OWNER_EMAIL` : votre adresse de réception des leads ;
    - `AVENIR_ECO_EMAIL` : l'adresse du contact Avenir Eco (plusieurs possibles, séparées par des virgules) ;
-   - facultatif : `AVENIR_ECO_LOGO_URL` pour remplacer le logo par une autre image (https).
+   - facultatif : `AVENIR_ECO_LOGO_URL` pour remplacer le logo intégré par une image en ligne (https).
 6. Choisissez la fonction `setup` dans la barre d'outils et cliquez sur « Exécuter ». Google demande des autorisations : l'écran « Google n'a pas validé cette application » est normal pour votre propre script (Paramètres avancés, puis continuer). Le journal affiche l'adresse du Google Sheet créé.
 7. Exécutez `sendTestEmails`. Vérifiez la réception chez vous **et** auprès du contact Avenir Eco, y compris dans ses courriers indésirables.
 8. Exécutez `installPurgeTrigger` (une seule fois).
 9. « Déployer » > « Nouveau déploiement » > type « Application Web » > exécuter en tant que « Moi » > accès « Tout le monde » > Déployer. Copiez l'URL qui se termine par `/exec`.
-10. Testez sur un vrai iPhone et un vrai Android, en 4G : ouvrez l'URL avec `?src=avenir-eco`, envoyez une demande avec votre numéro, puis vérifiez le Sheet, les deux e-mails, et les boutons Appeler, SMS, E-mail et Ajouter le contact.
+10. Testez sur un vrai iPhone et un vrai Android, en 4G : ouvrez l'URL terminée par `?src=avenir-eco` (sans ce paramètre, la page n'affiche ni logo ni mention d'Avenir Eco), envoyez une demande avec votre numéro, puis vérifiez le Sheet, les deux e-mails, et les boutons Appeler, SMS, E-mail et Ajouter le contact.
 
 ### Modifier l'application plus tard
 
@@ -69,7 +69,7 @@ Cette simulation (`scripts/gas-harness.js`) vérifie notre code, pas Google lui-
 
 ## Logo et marque d'Avenir Eco
 
-Le logo est affiché par son adresse officielle sur le site d'Avenir Eco, sans copie. Demandez à votre contact de confirmer qu'il est d'accord pour cet usage et, idéalement, de vous donner une adresse d'image stable : leur site peut changer l'adresse sans prévenir, et le nom en texte prend alors le relais.
+Le logo vient d'un fichier fourni par Allan Fix, recadré et réduit à environ 9 Ko, puis intégré dans `Logo.gs`. Il n'est affiché que sur les QR du partenaire. Demandez à votre contact d'Avenir Eco de confirmer qu'il est d'accord pour cet usage, et de vous envoyer un nouveau fichier si son logo change.
 
 ## Données personnelles
 

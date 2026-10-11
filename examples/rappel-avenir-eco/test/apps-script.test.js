@@ -308,12 +308,12 @@ test('un src malveillant est neutralisé et VCARD_URL remplace le lien par défa
 
 // --- partenaire : logo et mention ---------------------------------------------
 
-const OFFICIAL_LOGO = 'https://cdn.prod.website-files.com/6875f788ff9a3fd5f68ab607/6aca63c77fa0678dc3ec178a_avenireco-solaire-noir-vert.svg';
+const EMBEDDED_LOGO = /<img id="partner-logo" src="data:image\/jpeg;base64,[A-Za-z0-9+/=]{2000,}" alt="Avenir Eco">/;
 
-test('sur un QR Avenir Eco : logo, mention « En partenariat avec » et nom cité dans le texte d\'introduction', () => {
+test('sur un QR Avenir Eco : logo intégré, mention « En partenariat avec » et nom cité dans le texte d\'introduction', () => {
   const { html } = createGoogleEnvironment().page('avenir-eco');
   assert.match(html, /En partenariat avec/);
-  assert.ok(html.includes(`<img id="partner-logo" src="${OFFICIAL_LOGO}" alt="Avenir Eco"`));
+  assert.match(html, EMBEDDED_LOGO);
   assert.match(html, /<p class="lead">Vous êtes chez <strong>Avenir Eco<\/strong>\. Je ne suis pas disponible/);
   assert.match(html, /Avenir Eco, chez qui vous avez scanné ce code, est informé/);
 });
@@ -334,12 +334,20 @@ test('accès direct, source inconnue ou « avenir-economie » : aucune trace d\'
 
 test('AVENIR_ECO_LOGO_URL remplace le logo ; une valeur non https ou dangereuse est ignorée', () => {
   const good = createGoogleEnvironment({ props: { AVENIR_ECO_LOGO_URL: 'https://exemple.test/logo.png' } });
-  assert.match(good.page('avenir-eco').html, /src="https:\/\/exemple\.test\/logo\.png"/);
+  assert.match(good.page('avenir-eco').html, /<img id="partner-logo" src="https:\/\/exemple\.test\/logo\.png" alt="Avenir Eco">/);
   for (const bad of ['http://exemple.test/logo.png', 'javascript:alert(1)', 'https://x.test/a" onerror="alert(1)', 'data:image/svg+xml,<svg>']) {
     const html = createGoogleEnvironment({ props: { AVENIR_ECO_LOGO_URL: bad } }).page('avenir-eco').html;
-    assert.ok(html.includes(`src="${OFFICIAL_LOGO}"`), bad);
+    assert.match(html, EMBEDDED_LOGO, bad);
     assert.doesNotMatch(html, /onerror=/);
   }
+});
+
+test('le logo intégré est léger (page rapide en 4G) et l\'image est un vrai JPEG', () => {
+  const gas = createGoogleEnvironment();
+  const data = require('node:vm').runInContext('AVENIR_ECO_LOGO_DATA_URI', gas.context);
+  const bytes = Buffer.from(data.split(',')[1], 'base64');
+  assert.ok(bytes.length < 20000, `${bytes.length} octets`);
+  assert.deepEqual([...bytes.subarray(0, 3)], [0xff, 0xd8, 0xff]);
 });
 
 test('le partenaire reste notifié par e-mail (la page affichée n\'a pas changé la logique)', () => {

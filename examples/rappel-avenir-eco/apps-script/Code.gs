@@ -10,7 +10,7 @@
  *   AVENIR_ECO_EMAIL      e-mail du contact Avenir Eco (plusieurs : séparés par des virgules)
  *   PARTNER_SHARE_CONTACT "1" pour inclure téléphone et e-mail du client dans le message au partenaire
  *   VCARD_URL             remplace le lien vkard par défaut (facultatif)
- *   AVENIR_ECO_LOGO_URL   remplace l'adresse du logo d'Avenir Eco (facultatif, https uniquement)
+ *   AVENIR_ECO_LOGO_URL   remplace le logo d'Avenir Eco intégré (facultatif, https uniquement)
  *   SHEET_ID              rempli automatiquement par setup()
  */
 
@@ -33,9 +33,9 @@ const PARTNERS = {
   'avenir-eco': {
     label: 'Avenir Eco',
     emailProperty: 'AVENIR_ECO_EMAIL',
-    // Logo officiel du site d'Avenir Eco ; la propriété AVENIR_ECO_LOGO_URL le remplace si l'adresse change.
+    // Logo intégré (fichier Logo.gs) ; la propriété AVENIR_ECO_LOGO_URL (https) peut le remplacer.
     logoProperty: 'AVENIR_ECO_LOGO_URL',
-    logoUrl: 'https://cdn.prod.website-files.com/6875f788ff9a3fd5f68ab607/6aca63c77fa0678dc3ec178a_avenireco-solaire-noir-vert.svg'
+    logoData: function () { return AVENIR_ECO_LOGO_DATA_URI; }
   }
 };
 
@@ -84,7 +84,7 @@ function doGet(e) {
   template.source = normalizeSource(e && e.parameter && e.parameter.src);
   // Logo et mention du partenaire seulement sur les QR de ce partenaire, jamais sur un accès direct.
   const partner = resolvePartner_(template.source);
-  template.partner = partner ? { label: partner.label, logoUrl: partnerLogoUrl_(partner) } : null;
+  template.partner = partner ? { label: partner.label, logoHtml: partnerLogoHtml_(partner) } : null;
   return template.evaluate()
     .setTitle('Octopus Energy · ' + PROFILE.name)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -245,10 +245,11 @@ function resolvePartner_(source) {
   return null;
 }
 
-/** Adresse du logo : la propriété du script si elle est valide (https), sinon celle par défaut. */
-function partnerLogoUrl_(partner) {
+/** Balise <img> du logo : la propriété du script si elle est valide (https), sinon le logo intégré. */
+function partnerLogoHtml_(partner) {
   const custom = getProperty_(partner.logoProperty);
-  return custom && /^https:\/\/[^\s"'<>]+$/.test(custom) ? custom : partner.logoUrl;
+  const src = custom && /^https:\/\/[^\s"'<>]+$/.test(custom) ? custom : partner.logoData();
+  return '<img id="partner-logo" src="' + escapeHtml_(src) + '" alt="' + escapeHtml_(partner.label) + '">';
 }
 
 /** Retourne « sent » ou « failed » ; une seule nouvelle tentative après 1 s. */

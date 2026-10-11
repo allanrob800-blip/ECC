@@ -205,7 +205,10 @@ function createGoogleEnvironment(options = {}) {
   };
 
   const context = vm.createContext(env);
-  vm.runInContext(fs.readFileSync(path.join(SCRIPT_DIR, 'Code.gs'), 'utf8'), context, { filename: 'Code.gs' });
+  // Tous les fichiers .gs partagent la même portée globale, comme dans Apps Script.
+  for (const file of fs.readdirSync(SCRIPT_DIR).filter(name => name.endsWith('.gs')).sort()) {
+    vm.runInContext(fs.readFileSync(path.join(SCRIPT_DIR, file), 'utf8'), context, { filename: file });
+  }
 
   const roundTrip = value => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
   return {
