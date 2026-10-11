@@ -589,3 +589,11 @@ test('setup() met à jour un ancien Sheet : colonne « Conseiller cité » insé
   assert.equal(old.sheet.rows[2][8], 'Julien');
   assert.deepEqual([old.sheet.rows[2][9], old.sheet.rows[2][10]], ['sent', 'sent']);
 });
+
+test('le lien « Politique de confidentialité » pointe vers la bonne page (l\'ancienne adresse renvoyait une erreur 404)', () => {
+  for (const src of [undefined, 'avenir-eco']) {
+    const { html } = createGoogleEnvironment().page(src);
+    assert.match(html, /href="https:\/\/octopusenergy\.fr\/legal\/politique-confidentialite-oef"[^>]*>Politique de confidentialité</);
+    assert.doesNotMatch(html, /octopusenergy\.fr\/politique-de-confidentialite/);
+  }
+});

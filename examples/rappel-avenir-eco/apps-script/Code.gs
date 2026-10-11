@@ -22,7 +22,7 @@ const PROFILE = {
   phone: '+33685740141',
   email: 'allan.fix@octopusenergy.fr',
   trustpilotUrl: 'https://fr.trustpilot.com/review/octopusenergy.fr',
-  privacyUrl: 'https://octopusenergy.fr/politique-de-confidentialite',
+  privacyUrl: 'https://octopusenergy.fr/legal/politique-confidentialite-oef',
   privacyEmail: 'donnees@octoenergy.com',
   mascotUrl: 'https://static.octopuscdn.com/constantine/constantine.svg',
   vcardUrl: 'https://api.vkard.io/vcf/serve/44146dc1-7140-4653-b44b-bc7b1e1e5289/627b0e5c74'
