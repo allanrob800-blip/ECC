@@ -305,3 +305,45 @@ test('un src malveillant est neutralisé et VCARD_URL remplace le lien par défa
   assert.doesNotMatch(html, /<script>alert/);
   assert.match(html, /href="https:\/\/exemple\.test\/ma-fiche\.vcf"/);
 });
+
+// --- partenaire : logo et mention ---------------------------------------------
+
+const OFFICIAL_LOGO = 'https://cdn.prod.website-files.com/6875f788ff9a3fd5f68ab607/6aca63c77fa0678dc3ec178a_avenireco-solaire-noir-vert.svg';
+
+test('sur un QR Avenir Eco : logo, mention « En partenariat avec » et nom cité dans le texte d\'introduction', () => {
+  const { html } = createGoogleEnvironment().page('avenir-eco');
+  assert.match(html, /En partenariat avec/);
+  assert.ok(html.includes(`<img id="partner-logo" src="${OFFICIAL_LOGO}" alt="Avenir Eco"`));
+  assert.match(html, /<p class="lead">Vous êtes chez <strong>Avenir Eco<\/strong>\. Je ne suis pas disponible/);
+  assert.match(html, /Avenir Eco, chez qui vous avez scanné ce code, est informé/);
+});
+
+test('une source préfixée (avenir-eco-rennes) affiche aussi le partenaire', () => {
+  assert.match(createGoogleEnvironment().page('avenir-eco-rennes').html, /En partenariat avec/);
+});
+
+test('accès direct, source inconnue ou « avenir-economie » : aucune trace d\'Avenir Eco sur la page', () => {
+  for (const src of [undefined, 'direct', 'autre-stand', 'avenir-economie', '"><b>']) {
+    const { html: full } = createGoogleEnvironment().page(src);
+    const html = full.replace(/<style>[\s\S]*?<\/style>|<script>[\s\S]*?<\/script>/g, '');
+    assert.doesNotMatch(html, /Avenir Eco|partner-logo|En partenariat/, `src=${src}`);
+    assert.match(html, /<p class="lead">Je ne suis pas disponible pour l'instant/);
+    assert.doesNotMatch(html, /est informé qu'une demande/);
+  }
+});
+
+test('AVENIR_ECO_LOGO_URL remplace le logo ; une valeur non https ou dangereuse est ignorée', () => {
+  const good = createGoogleEnvironment({ props: { AVENIR_ECO_LOGO_URL: 'https://exemple.test/logo.png' } });
+  assert.match(good.page('avenir-eco').html, /src="https:\/\/exemple\.test\/logo\.png"/);
+  for (const bad of ['http://exemple.test/logo.png', 'javascript:alert(1)', 'https://x.test/a" onerror="alert(1)', 'data:image/svg+xml,<svg>']) {
+    const html = createGoogleEnvironment({ props: { AVENIR_ECO_LOGO_URL: bad } }).page('avenir-eco').html;
+    assert.ok(html.includes(`src="${OFFICIAL_LOGO}"`), bad);
+    assert.doesNotMatch(html, /onerror=/);
+  }
+});
+
+test('le partenaire reste notifié par e-mail (la page affichée n\'a pas changé la logique)', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead());
+  assert.equal(mailsTo(gas, 'contact@avenir.test').length, 1);
+});

@@ -49,10 +49,24 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }[ch]));
 }
 
+/** Compile un gabarit Apps Script : <?= échappé ?>, <?!= brut ?> et <? code ?>. */
 function renderTemplate(name, data) {
-  let html = fs.readFileSync(path.join(SCRIPT_DIR, `${name}.html`), 'utf8');
-  html = html.replace(/<\?!=\s*include\('([^']+)'\);?\s*\?>/g, (_m, file) => fs.readFileSync(path.join(SCRIPT_DIR, `${file}.html`), 'utf8'));
-  return html.replace(/<\?=\s*([^?]+?)\s*\?>/g, (_m, expr) => escapeHtml(new Function('profile', 'source', `return (${expr});`)(data.profile, data.source)));
+  const source = fs.readFileSync(path.join(SCRIPT_DIR, `${name}.html`), 'utf8');
+  let code = 'let __out = "";\n';
+  const scriptlet = /<\?(!?=)?([\s\S]*?)\?>/g;
+  let last = 0;
+  let match;
+  while ((match = scriptlet.exec(source))) {
+    code += `__out += ${JSON.stringify(source.slice(last, match.index))};\n`;
+    const body = match[2].trim().replace(/;$/, '');
+    if (match[1] === '=') code += `__out += __escape(${body});\n`;
+    else if (match[1] === '!=') code += `__out += (${body});\n`;
+    else code += `${match[2]}\n`;
+    last = scriptlet.lastIndex;
+  }
+  code += `__out += ${JSON.stringify(source.slice(last))};\nreturn __out;`;
+  const include = file => fs.readFileSync(path.join(SCRIPT_DIR, `${file}.html`), 'utf8');
+  return new Function('__escape', 'include', 'data', `with (data) {\n${code}\n}`)(escapeHtml, include, data);
 }
 
 function createSheet(state) {

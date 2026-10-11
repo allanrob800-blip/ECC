@@ -15,9 +15,19 @@
       </div>
     </header>
 
+    <? if (partner) { ?>
+    <div class="partner">
+      <span>En partenariat avec</span>
+      <span class="partner-logo">
+        <img id="partner-logo" src="<?= partner.logoUrl ?>" alt="<?= partner.label ?>" height="30">
+        <strong id="partner-name" hidden><?= partner.label ?></strong>
+      </span>
+    </div>
+    <? } ?>
+
     <section id="form-panel" aria-labelledby="callback-title">
       <h2 id="callback-title">Me faire rappeler</h2>
-      <p class="lead">Je ne suis pas disponible pour l'instant. Laissez-moi votre numéro : je vous rappelle rapidement.</p>
+      <p class="lead"><? if (partner) { ?>Vous êtes chez <strong><?= partner.label ?></strong>. <? } ?>Je ne suis pas disponible pour l'instant : laissez-moi votre numéro, je vous rappelle rapidement.</p>
 
       <form id="callback-form" novalidate>
         <input type="hidden" name="source" value="<?= source ?>">
@@ -60,7 +70,7 @@
 
         <div class="consent">
           <input id="consent" name="consent" type="checkbox">
-          <label for="consent">J'accepte d'être recontacté(e) par Octopus Energy France au sujet d'une offre d'électricité et/ou de gaz. Le partenaire chez qui vous avez scanné ce code est informé qu'une demande a été faite.</label>
+          <label for="consent">J'accepte d'être recontacté(e) par Octopus Energy France au sujet d'une offre d'électricité et/ou de gaz.<? if (partner) { ?> <?= partner.label ?>, chez qui vous avez scanné ce code, est informé qu'une demande a été faite.<? } ?></label>
         </div>
         <p class="error" id="err-consent" role="alert"></p>
 

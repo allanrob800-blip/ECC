@@ -14,6 +14,15 @@
   // Si l'image de la mascotte (hébergée par Octopus) est indisponible, on la masque proprement.
   mascot.addEventListener('error', function () { mascot.hidden = true; });
 
+  // Logo du partenaire injoignable : on affiche son nom en texte à la place.
+  var partnerLogo = document.getElementById('partner-logo');
+  if (partnerLogo) {
+    partnerLogo.addEventListener('error', function () {
+      partnerLogo.hidden = true;
+      document.getElementById('partner-name').hidden = false;
+    });
+  }
+
   var FIELDS = ['firstName', 'phone', 'email', 'consent'];
   var GENERIC_ERROR = 'Une erreur est survenue. Réessayez ou appelez-moi directement.';
 
