@@ -1,0 +1,18 @@
+{
+  "name": "rappel-avenir-eco",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Page « Me faire rappeler » (QR code) en Google Apps Script, avec notification e-mail du partenaire Avenir Eco",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "preview": "node scripts/preview.js",
+    "qr": "node scripts/make-qr.js"
+  },
+  "devDependencies": {
+    "qrcode": "^1.5.4"
+  }
+}

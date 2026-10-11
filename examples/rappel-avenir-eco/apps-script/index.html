@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <base target="_top">
+  <?!= include('style'); ?>
+</head>
+<body>
+  <main class="page" id="page">
+    <header class="id">
+      <img class="mascot" id="mascot" src="<?= profile.mascotUrl ?>" alt="" width="64" height="64">
+      <div>
+        <p class="brand">Octopus Energy</p>
+        <h1 class="name"><?= profile.name ?></h1>
+        <p class="role"><?= profile.title ?></p>
+      </div>
+    </header>
+
+    <? if (partner) { ?>
+    <div class="partner">
+      <span>En partenariat avec</span>
+      <span class="partner-logo">
+        <?!= partner.logoHtml ?>
+        <strong id="partner-name" hidden><?= partner.label ?></strong>
+      </span>
+    </div>
+    <? } ?>
+
+    <section id="form-panel" aria-labelledby="callback-title">
+      <h2 id="callback-title">Me faire rappeler</h2>
+      <p class="lead"><? if (partner) { ?>Vous êtes chez <strong><?= partner.label ?></strong>. <? } ?>Je ne suis pas disponible pour l'instant : laissez-moi votre numéro, je vous rappelle rapidement.</p>
+
+      <form id="callback-form" novalidate>
+        <input type="hidden" name="source" value="<?= source ?>">
+        <div class="trap" aria-hidden="true">
+          <label>Ne pas remplir <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+        </div>
+
+        <div class="field">
+          <label for="firstName">Prénom</label>
+          <input id="firstName" name="firstName" type="text" autocomplete="given-name" enterkeyhint="next" maxlength="60" required>
+          <p class="error" id="err-firstName" role="alert"></p>
+        </div>
+
+        <div class="field">
+          <label for="phone">Téléphone</label>
+          <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" enterkeyhint="done" maxlength="30" placeholder="06 12 34 56 78" required>
+          <p class="error" id="err-phone" role="alert"></p>
+        </div>
+
+        <fieldset class="slots">
+          <legend>Quand puis-je vous rappeler ?</legend>
+          <label class="chip"><input type="radio" name="slot" value="asap" checked><span>Dès que possible</span></label>
+          <label class="chip"><input type="radio" name="slot" value="morning"><span>Ce matin<small>9h–12h</small></span></label>
+          <label class="chip"><input type="radio" name="slot" value="afternoon"><span>Cet après-midi<small>14h–17h</small></span></label>
+          <label class="chip"><input type="radio" name="slot" value="evening"><span>Fin de journée<small>après 17h</small></span></label>
+        </fieldset>
+
+        <? if (partner && partner.advisors.length > 0) { ?>
+        <fieldset class="slots advisors">
+          <legend>Un conseiller <?= partner.label ?> vous en a parlé ? <span class="opt">(facultatif)</span></legend>
+          <? partner.advisors.forEach(function (name) { ?>
+          <label class="chip"><input type="radio" name="advisor" value="<?= name ?>"><span><?= name ?></span></label>
+          <? }); ?>
+          <label class="chip"><input type="radio" name="advisor" value="autre"><span>Un autre conseiller</span></label>
+          <label class="chip chip-wide"><input type="radio" name="advisor" value="" checked><span>Non / je ne sais plus</span></label>
+        </fieldset>
+        <? } ?>
+
+        <details class="more" id="more">
+          <summary>Nom et e&#8209;mail <span class="opt">&nbsp;(facultatif)</span></summary>
+          <div class="field">
+            <label for="lastName">Nom</label>
+            <input id="lastName" name="lastName" type="text" autocomplete="family-name" enterkeyhint="next" maxlength="60">
+          </div>
+          <div class="field">
+            <label for="email">E-mail</label>
+            <input id="email" name="email" type="email" inputmode="email" autocomplete="email" enterkeyhint="done" maxlength="254">
+            <p class="error" id="err-email" role="alert"></p>
+          </div>
+        </details>
+
+        <div class="consent">
+          <input id="consent" name="consent" type="checkbox">
+          <label for="consent">J'accepte d'être recontacté(e) par Octopus Energy France au sujet d'une offre d'électricité et/ou de gaz.<? if (partner) { ?> <?= partner.label ?>, chez qui vous avez scanné ce code, est informé qu'une demande a été faite.<? } ?></label>
+        </div>
+        <p class="error" id="err-consent" role="alert"></p>
+
+        <p class="legal">Vos données sont utilisées uniquement pour vous recontacter au sujet de nos offres d'énergie. Elles ne sont jamais revendues. Conservation : 12 mois. Droits d'accès, rectification et suppression : <a href="mailto:<?= profile.privacyEmail ?>" target="_top"><?= profile.privacyEmail ?></a> · <a href="<?= profile.privacyUrl ?>" target="_blank" rel="noopener">Politique de confidentialité</a></p>
+        <p class="error form-error" id="err-form" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="contact-panel" aria-labelledby="contact-title">
+      <h2 id="contact-title" class="h-secondary">Me joindre autrement</h2>
+      <ul class="actions">
+        <li>
+          <a class="action" href="tel:<?= profile.phone ?>" target="_top">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            Appeler
+          </a>
+        </li>
+        <li>
+          <a class="action" href="sms:<?= profile.phone ?>" target="_top">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            SMS
+          </a>
+        </li>
+        <li>
+          <a class="action" href="mailto:<?= profile.email ?>" target="_top">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            E-mail
+          </a>
+        </li>
+        <li>
+          <a class="action" href="<?= profile.trustpilotUrl ?>" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            Avis
+          </a>
+        </li>
+      </ul>
+      <a class="btn btn-secondary" href="<?= profile.vcardUrl ?>" target="_top">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+        Ajouter le contact
+      </a>
+    </section>
+
+    <section id="success-panel" class="success" hidden tabindex="-1" aria-live="polite">
+      <svg class="check" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="8 12.5 11 15.5 16 9"/></svg>
+      <h2>C'est dans la boîte !</h2>
+      <p>Merci, votre demande est bien enregistrée.<br><?= profile.firstName ?> vous rappelle très vite.</p>
+    </section>
+
+    <!-- Barre collée en bas : le bouton principal reste toujours sous le pouce. -->
+    <div class="bar" id="bar">
+      <button class="btn btn-primary" type="submit" form="callback-form" id="submit">Me faire rappeler</button>
+    </div>
+  </main>
+  <?!= include('app'); ?>
+</body>
+</html>

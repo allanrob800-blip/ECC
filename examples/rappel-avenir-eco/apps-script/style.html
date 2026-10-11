@@ -1,0 +1,228 @@
+<style>
+:root {
+  --bg: #12063f;
+  --card: #1f1166;
+  --field: #150a4d;
+  --line: #3a2a9a;
+  --text: #ffffff;
+  --muted: #bdb5ff;
+  --cyan: #5fd9f5;
+  --primary: #5b3df5;
+  --primary-hover: #6e54ff;
+  --danger: #ff8aa8;
+  --ok: #5fe3a1;
+  --tap: 56px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Un champ ou une erreur qui reçoit le focus ne doit jamais finir sous la barre du bas. */
+  scroll-padding-bottom: 120px;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(120% 60% at 50% 0%, #2a1790 0%, var(--bg) 70%);
+  background-color: var(--bg);
+  color: var(--text);
+  line-height: 1.45;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Format téléphone : une seule colonne étroite, y compris sur un grand écran. */
+.page {
+  max-width: 430px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 20px 16px 0;
+}
+
+.id { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.mascot { flex: none; width: 64px; height: 64px; }
+.mascot[hidden] { display: none; }
+.brand { margin: 0; color: var(--cyan); font-weight: 800; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.name { margin: 0; font-size: 1.3rem; line-height: 1.2; }
+.role { margin: 2px 0 0; color: var(--muted); font-size: 0.85rem; }
+
+.partner { display: flex; align-items: center; gap: 12px; margin: -4px 0 20px; color: var(--muted); font-size: 0.8rem; }
+/* Pastille blanche : le logo d'Avenir Eco est vert foncé sur blanc, illisible sur le fond violet. Carré, donc plus haut que large. */
+.partner-logo { display: flex; align-items: center; padding: 6px 10px; border-radius: 14px; background: #fff; color: #0b1d18; font-size: 1rem; }
+.partner-logo img { display: block; height: 88px; width: auto; max-width: 200px; }
+.partner-logo [hidden] { display: none; }
+
+h2 { margin: 0 0 6px; color: var(--cyan); font-size: 1.5rem; line-height: 1.2; }
+.h-secondary { margin-top: 28px; font-size: 1.1rem; color: var(--muted); }
+.lead { margin: 0 0 20px; color: var(--muted); font-size: 1rem; }
+
+.field { margin-bottom: 16px; }
+
+label, legend { display: block; margin-bottom: 8px; font-size: 0.9rem; font-weight: 600; }
+legend { padding: 0; }
+.opt { color: var(--muted); font-weight: 400; }
+
+input[type="text"], input[type="tel"], input[type="email"] {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 12px 16px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--field);
+  color: var(--text);
+  /* 16px minimum : en dessous, iOS zoome la page au focus. */
+  font: inherit;
+  font-size: 18px;
+}
+
+input[aria-invalid="true"] { border-color: var(--danger); }
+
+/* Créneau : gros boutons à toucher, 2 par ligne, plutôt qu'une liste déroulante. */
+.slots { margin: 0 0 16px; padding: 0; border: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.slots legend { grid-column: 1 / -1; }
+.chip { position: relative; margin: 0; }
+.chip input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.chip span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  padding: 8px 10px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--field);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+}
+.chip small { margin-top: 2px; color: var(--muted); font-size: 0.75rem; font-weight: 400; }
+.chip-wide { grid-column: 1 / -1; }
+.chip input:checked + span { border-color: var(--cyan); background: var(--line); }
+.chip input:focus-visible + span { outline: 3px solid var(--cyan); outline-offset: 2px; }
+
+.more { margin-bottom: 16px; border: 2px dashed var(--line); border-radius: 16px; padding: 0 16px; }
+.more[open] { padding-bottom: 4px; }
+.more summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  list-style: none;
+}
+.more summary::-webkit-details-marker { display: none; }
+.more summary::before { content: "+"; margin-right: 10px; color: var(--cyan); font-size: 1.4rem; line-height: 1; }
+.more[open] summary::before { content: "−"; }
+
+.consent {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 14px;
+  align-items: start;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+}
+.consent input { width: 28px; height: 28px; margin: 0; accent-color: var(--primary); }
+.consent label { margin: 0; font-size: 0.85rem; font-weight: 400; }
+
+.legal { margin: 14px 0 0; color: var(--muted); font-size: 0.75rem; }
+.legal a { color: var(--muted); }
+
+.error { margin: 6px 0 0; color: var(--danger); font-size: 0.9rem; font-weight: 600; }
+.error:empty { display: none; }
+.form-error { margin: 0 0 10px; }
+
+/* Champ piège anti-robot : hors écran mais pas display:none (certains robots l'ignorent alors). */
+.trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 16px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.btn-primary { background: var(--primary); }
+.btn-secondary { background: transparent; border: 2px solid var(--cyan); color: var(--cyan); }
+.btn[disabled] { opacity: 0.6; cursor: progress; }
+
+/* Contacts alternatifs : gros boutons, 2 par ligne, en bas de page. */
+.actions { list-style: none; margin: 0 0 12px; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: var(--tap);
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.action svg { color: var(--cyan); }
+
+@media (hover: hover) {
+  .btn-primary:hover { background: var(--primary-hover); }
+  .action:hover { border-color: var(--cyan); }
+}
+
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* Barre du bas : collée au bas de l'écran, le contenu défile dessous. */
+.bar {
+  position: sticky;
+  bottom: 0;
+  margin: 24px -16px 0;
+  padding: 28px 16px max(16px, env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--bg) 62%, rgba(18, 6, 63, 0));
+}
+
+.success { text-align: center; padding: 8px 0 32px; }
+.success:focus { outline: none; }
+.success h2 { color: var(--ok); }
+.success p { color: var(--muted); }
+.check { width: 72px; height: 72px; color: var(--ok); margin-bottom: 8px; }
+
+[hidden] { display: none !important; }
+.done .bar { display: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn, .chip span { transition: background-color 0.15s ease, border-color 0.15s ease; }
+  .btn:active { transform: scale(0.98); }
+}
+</style>

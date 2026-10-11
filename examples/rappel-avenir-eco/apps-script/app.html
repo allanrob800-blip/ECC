@@ -1,0 +1,129 @@
+<script>
+(function () {
+  'use strict';
+
+  var page = document.getElementById('page');
+  var form = document.getElementById('callback-form');
+  var formPanel = document.getElementById('form-panel');
+  var contactPanel = document.getElementById('contact-panel');
+  var successPanel = document.getElementById('success-panel');
+  var submit = document.getElementById('submit');
+  var more = document.getElementById('more');
+  var mascot = document.getElementById('mascot');
+
+  // Si l'image de la mascotte (hébergée par Octopus) est indisponible, on la masque proprement.
+  mascot.addEventListener('error', function () { mascot.hidden = true; });
+
+  // Logo du partenaire injoignable : on affiche son nom en texte à la place.
+  var partnerLogo = document.getElementById('partner-logo');
+  if (partnerLogo) {
+    partnerLogo.addEventListener('error', function () {
+      partnerLogo.hidden = true;
+      document.getElementById('partner-name').hidden = false;
+    });
+  }
+
+  var FIELDS = ['firstName', 'phone', 'email', 'consent'];
+  var GENERIC_ERROR = 'Une erreur est survenue. Réessayez ou appelez-moi directement.';
+
+  var formError = document.getElementById('err-form');
+
+  function setError(name, message) {
+    var node = document.getElementById('err-' + name);
+    var input = form.elements[name];
+    node.textContent = message || '';
+    if (input) input.setAttribute('aria-invalid', message ? 'true' : 'false');
+  }
+
+  function clearErrors() {
+    FIELDS.forEach(function (name) { setError(name, ''); });
+    formError.textContent = '';
+  }
+
+  function showErrors(errors) {
+    var first = null;
+    FIELDS.forEach(function (name) {
+      if (errors[name]) {
+        setError(name, errors[name]);
+        if (name === 'email') more.open = true;
+        if (!first) first = form.elements[name];
+      }
+    });
+    if (first) first.focus();
+  }
+
+  function clientCheck(data) {
+    var errors = {};
+    if (!data.firstName.trim()) errors.firstName = 'Indiquez votre prénom.';
+    if (data.phone.replace(/[^\d+]/g, '').length < 9) errors.phone = 'Numéro de téléphone invalide.';
+    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(data.email)) errors.email = 'Adresse e-mail invalide.';
+    if (!data.consent) errors.consent = 'Votre accord est nécessaire pour être rappelé(e).';
+    return errors;
+  }
+
+  function finish() {
+    submit.disabled = false;
+    submit.textContent = 'Me faire rappeler';
+  }
+
+  // Touche « Suivant » du clavier : passe au champ suivant au lieu d'envoyer le formulaire trop tôt.
+  var NEXT = { firstName: 'phone', lastName: 'email' };
+  form.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' || event.target.tagName !== 'INPUT' || event.target.type === 'checkbox') return;
+    event.preventDefault();
+    var next = NEXT[event.target.id];
+    if (next) document.getElementById(next).focus();
+    else event.target.blur();
+  });
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    clearErrors();
+
+    var data = {
+      firstName: form.elements.firstName.value,
+      lastName: form.elements.lastName.value,
+      phone: form.elements.phone.value,
+      email: form.elements.email.value,
+      slot: form.elements.slot.value,
+      advisor: form.elements.advisor ? form.elements.advisor.value : '',
+      consent: form.elements.consent.checked,
+      source: form.elements.source.value,
+      website: form.elements.website.value
+    };
+
+    var errors = clientCheck(data);
+    if (Object.keys(errors).length > 0) {
+      showErrors(errors);
+      return;
+    }
+
+    submit.disabled = true;
+    submit.textContent = 'Envoi en cours…';
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        finish();
+        if (result && result.ok) {
+          formPanel.hidden = true;
+          contactPanel.hidden = true;
+          successPanel.hidden = false;
+          page.classList.add('done');
+          window.scrollTo(0, 0);
+          successPanel.focus();
+        } else if (result && result.errors) {
+          showErrors(result.errors);
+        } else {
+          formError.textContent = (result && result.error) || GENERIC_ERROR;
+          formError.scrollIntoView({ block: 'center' });
+        }
+      })
+      .withFailureHandler(function () {
+        finish();
+        formError.textContent = 'Connexion impossible. Vérifiez votre réseau ou appelez-moi directement.';
+        formError.scrollIntoView({ block: 'center' });
+      })
+      .submitCallback(data);
+  });
+})();
+</script>

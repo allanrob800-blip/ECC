@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Présentoir Octopus Energy</title>
+<style>
+/* Format : 105 x 150 mm (portrait) + 3 mm de fond perdu de chaque côté = page de 111 x 156 mm. */
+@page { size: 111mm 156mm; margin: 0; }
+
+@font-face { font-family: "Poppins"; font-weight: 500; src: url("assets/fonts/poppins-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Poppins"; font-weight: 600; src: url("assets/fonts/poppins-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Poppins"; font-weight: 700; src: url("assets/fonts/poppins-latin-700-normal.woff2") format("woff2"); }
+
+:root {
+  --border: #4a56b4;
+  --panel-top: #231a64;
+  --panel-bottom: #2e2686;
+  --blue: #62c4f3;
+  --pill: #4753b8;
+  --ink: #1d1560;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 111mm; background: #fff; font-family: "Poppins", system-ui, sans-serif; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+.page { position: relative; width: 111mm; height: 156mm; background: var(--border); overflow: hidden; page-break-after: always; break-after: page; }
+.page:last-child { page-break-after: auto; break-after: auto; }
+
+/* Panneau intérieur : 5 mm de bordure claire à l'intérieur du format fini (3 mm de fond perdu + 5 mm). */
+.panel {
+  position: absolute; inset: 8mm;
+  border-radius: 7mm;
+  background: linear-gradient(180deg, var(--panel-top) 0%, var(--panel-bottom) 100%);
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 0 7mm;
+}
+
+.wordmark { display: block; width: 50mm; height: auto; }
+h1 { color: var(--blue); font-weight: 700; line-height: 1.12; }
+.sub { font-weight: 500; line-height: 1.4; }
+.slogan { position: absolute; left: 0; right: 0; bottom: 5.5mm; font-size: 2.9mm; font-weight: 500; }
+
+/* ---------- recto ---------- */
+.front .mascot { display: block; height: 19mm; width: auto; margin-top: 6mm; }
+.front .wordmark { width: 44mm; margin-top: 2mm; }
+.front h1 { margin-top: 4mm; font-size: 6.2mm; }
+.front .sub { margin-top: 2mm; font-size: 3.4mm; }
+.front .sub b { font-weight: 700; }
+.qrbox { margin-top: 4mm; width: 42mm; height: 42mm; background: #fff; border-radius: 4mm; padding: 0; display: grid; place-items: center; }
+.qrbox svg { display: block; width: 42mm; height: 42mm; border-radius: 4mm; }
+
+/* ---------- verso ---------- */
+.back .wordmark { width: 46mm; margin-top: 6.5mm; }
+.back .mascot { display: block; height: 21mm; width: auto; margin-top: 3.5mm; }
+.back h1 { margin-top: 4mm; font-size: 6mm; }
+.back .sub { margin-top: 2.4mm; font-size: 3.4mm; padding: 0 3mm; }
+.numberbox { margin-top: 3.4mm; width: 74mm; background: #fff; color: var(--ink); border-radius: 3.2mm; padding: 3.4mm 0; font-size: 8.2mm; font-weight: 700; letter-spacing: 0.01em; }
+.namepill { margin-top: 3.2mm; width: 74mm; background: var(--pill); border-radius: 3.2mm; padding: 2.4mm 0; font-size: 3.6mm; font-weight: 600; line-height: 1.25; }
+.namepill small { display: block; font-size: 3mm; font-weight: 500; opacity: 0.92; }
+.partner { display: flex; align-items: center; justify-content: center; gap: 3.5mm; margin-top: 4mm; }
+.partner span { font-size: 3mm; font-weight: 500; white-space: nowrap; }
+/* Pastille blanche : le logo d'Avenir Eco est vert foncé sur blanc. */
+.partner .pill { background: #fff; border-radius: 3mm; padding: 1.4mm 2.4mm; display: block; }
+.partner img { display: block; height: 12.5mm; width: auto; }
+.slogan { font-size: 2.8mm; bottom: 4.5mm; }
+</style>
+</head>
+<body>
+
+<section class="page front">
+  <div class="panel">
+    <img class="mascot" src="assets/mascot_front.png" alt="">
+    <img class="wordmark" src="assets/wordmark.png" alt="octopus energy">
+    <h1>Scannez pour<br>être rappelé(e)</h1>
+    <p class="sub">Laissez votre numéro : <b>{{FIRST_NAME}}</b>, notre conseiller Octopus&nbsp;Energy, vous rappelle rapidement.</p>
+    <div class="qrbox">{{QR_SVG}}</div>
+    <div class="partner"><span>En partenariat avec</span><div class="pill"><img src="assets/avenir_logo.jpg" alt="Avenir Eco"></div></div>
+    <p class="slogan">L’énergie est notre avenir, économisons-la !</p>
+  </div>
+</section>
+
+<section class="page back">
+  <div class="panel">
+    <img class="wordmark" src="assets/wordmark.png" alt="octopus energy">
+    <img class="mascot" src="assets/mascot_back.png" alt="">
+    <h1>Octopus n’est pas<br>sur le stand aujourd’hui</h1>
+    <p class="sub">Pour vos questions vous pouvez joindre notre commercial au numéro suivant</p>
+    <div class="numberbox">{{PHONE_DISPLAY}}</div>
+    <div class="namepill">{{FULL_NAME}}<small>{{TITLE}}</small></div>
+    <div class="partner"><span>En partenariat avec</span><div class="pill"><img src="assets/avenir_logo.jpg" alt="Avenir Eco"></div></div>
+    <p class="slogan">L’énergie est notre avenir, économisons-la !</p>
+  </div>
+</section>
+
+</body>
+</html>
