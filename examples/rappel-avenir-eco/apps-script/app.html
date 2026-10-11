@@ -2,11 +2,13 @@
 (function () {
   'use strict';
 
+  var page = document.getElementById('page');
   var form = document.getElementById('callback-form');
   var formPanel = document.getElementById('form-panel');
+  var contactPanel = document.getElementById('contact-panel');
   var successPanel = document.getElementById('success-panel');
   var submit = document.getElementById('submit');
-  var formError = document.getElementById('err-form');
+  var more = document.getElementById('more');
   var mascot = document.getElementById('mascot');
 
   // Si l'image de la mascotte (hébergée par Octopus) est indisponible, on la masque proprement.
@@ -14,6 +16,8 @@
 
   var FIELDS = ['firstName', 'phone', 'email', 'consent'];
   var GENERIC_ERROR = 'Une erreur est survenue. Réessayez ou appelez-moi directement.';
+
+  var formError = document.getElementById('err-form');
 
   function setError(name, message) {
     var node = document.getElementById('err-' + name);
@@ -32,6 +36,7 @@
     FIELDS.forEach(function (name) {
       if (errors[name]) {
         setError(name, errors[name]);
+        if (name === 'email') more.open = true;
         if (!first) first = form.elements[name];
       }
     });
@@ -51,6 +56,16 @@
     submit.disabled = false;
     submit.textContent = 'Me faire rappeler';
   }
+
+  // Touche « Suivant » du clavier : passe au champ suivant au lieu d'envoyer le formulaire trop tôt.
+  var NEXT = { firstName: 'phone', lastName: 'email' };
+  form.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' || event.target.tagName !== 'INPUT' || event.target.type === 'checkbox') return;
+    event.preventDefault();
+    var next = NEXT[event.target.id];
+    if (next) document.getElementById(next).focus();
+    else event.target.blur();
+  });
 
   form.addEventListener('submit', function (event) {
     event.preventDefault();
@@ -81,17 +96,22 @@
         finish();
         if (result && result.ok) {
           formPanel.hidden = true;
+          contactPanel.hidden = true;
           successPanel.hidden = false;
+          page.classList.add('done');
+          window.scrollTo(0, 0);
           successPanel.focus();
         } else if (result && result.errors) {
           showErrors(result.errors);
         } else {
           formError.textContent = (result && result.error) || GENERIC_ERROR;
+          formError.scrollIntoView({ block: 'center' });
         }
       })
       .withFailureHandler(function () {
         finish();
         formError.textContent = 'Connexion impossible. Vérifiez votre réseau ou appelez-moi directement.';
+        formError.scrollIntoView({ block: 'center' });
       })
       .submitCallback(data);
   });

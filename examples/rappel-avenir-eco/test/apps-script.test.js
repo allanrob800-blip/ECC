@@ -280,6 +280,17 @@ test('la page contient « Me faire rappeler », le lien vCard direct et plus rie
   }
 });
 
+test('format téléphone : bouton principal collé en bas, créneaux en gros boutons, champs facultatifs repliés', () => {
+  const gas = createGoogleEnvironment();
+  const { html } = gas.page();
+  assert.match(html, /<div class="bar" id="bar">\s*<button class="btn btn-primary" type="submit" form="callback-form"/);
+  assert.equal([...html.matchAll(/<input type="radio" name="slot"/g)].length, 4);
+  assert.match(html, /<details class="more" id="more">/);
+  assert.match(html, /<input id="phone"[^>]*type="tel"[^>]*inputmode="tel"/);
+  assert.match(html, /position: sticky;\s*bottom: 0;/);
+  assert.doesNotMatch(html, /<select/);
+});
+
 test('tous les liens de la page ont une cible compatible avec le bac à sable (_top ou _blank)', () => {
   const gas = createGoogleEnvironment();
   const { html } = gas.page();
