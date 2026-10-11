@@ -275,7 +275,7 @@ test('la page contient « Me faire rappeler », le lien vCard direct et plus rie
   assert.match(page.html, /Me faire rappeler/);
   assert.match(page.html, /name="source" value="avenir-eco"/);
   assert.match(page.html, /href="https:\/\/api\.vkard\.io\/vcf\/serve\/44146dc1-7140-4653-b44b-bc7b1e1e5289\/627b0e5c74"/);
-  for (const banned of [/chèque énergie/i, /fan club/i, /je recommande/i, />\s*App\s*</, /typeform/i, /cagnotte/i, /40 €/, /<\?/]) {
+  for (const banned of [/chèque énergie/i, /fan club/i, /je recommande/i, />\s*App\s*</, /typeform/i, /cagnotte/i, /40 €/, /souscri/i, /<\?/]) {
     assert.doesNotMatch(page.html, banned);
   }
 });
@@ -354,4 +354,13 @@ test('le partenaire reste notifié par e-mail (la page affichée n\'a pas chang�
   const gas = ready();
   gas.call('submitCallback', lead());
   assert.equal(mailsTo(gas, 'contact@avenir.test').length, 1);
+});
+
+test('aucun lien ne pousse le client à souscrire seul : ni sur la page, ni dans la confirmation (le lead doit rester attribué)', () => {
+  for (const src of [undefined, 'avenir-eco']) {
+    const { html } = createGoogleEnvironment().page(src);
+    assert.doesNotMatch(html, /souscri|octopusenergy\.fr\/(souscription|offre)|minutes chrono/i, `src=${src}`);
+    const success = html.slice(html.indexOf('id="success-panel"'), html.indexOf('<div class="bar"'));
+    assert.equal([...success.matchAll(/<a\s/g)].length, 0, 'la confirmation ne contient aucun lien');
+  }
 });
