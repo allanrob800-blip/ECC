@@ -40,7 +40,7 @@ async function main() {
   const svg = await QRCode.toString(url.toString(), {
     type: 'svg', errorCorrectionLevel: 'M', margin: 4, color: { dark: '#0d0640', light: '#ffffff' }
   });
-  const boxMm = 45;
+  const boxMm = 42; // doit rester égal à la largeur de .qrbox dans template.html
   const moduleMm = boxMm / (qr.modules.size + 8);
   process.stdout.write(`QR : ${qr.modules.size}x${qr.modules.size} modules, ${moduleMm.toFixed(2)} mm par module (minimum conseillé : 0,40 mm)\n`);
   if (moduleMm < 0.4) throw new Error('QR trop dense pour cette taille : raccourcir l\'URL.');

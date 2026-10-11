@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Détoure la mascotte et le logo « octopus energy » depuis les photos de l'ancien présentoir.
 
-Usage : python3 prepare_assets.py <photo-recto.jpg> <photo-verso.jpg>
+Usage : python3 prepare_assets.py <photo-recto.jpg> <photo-verso.jpg> [logo-avenir-eco.jpg]
 Écrit dans assets/ : mascot_front.png, mascot_back.png, wordmark.png (fonds transparents),
-et colors.json (couleurs mesurées sur les photos). Nécessite Pillow et numpy.
+colors.json (couleurs mesurées sur les photos) et, si un logo est fourni, avenir_logo.jpg
+(recadré, fond blanc pur, 400 px de haut : à poser sur une pastille blanche). Nécessite Pillow et numpy.
 Les images Octopus ne sont pas versionnées (assets/ est ignoré par git).
 """
 import json, sys
@@ -14,6 +15,8 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 OUT = Path(__file__).parent / 'assets'
+# Rose vif de la marque : la photo, prise en lumière d'intérieur, le ternit (249, 94, 129).
+BRAND_PINK = (255, 72, 135)
 
 
 def fill_holes(mask):
@@ -60,7 +63,7 @@ def mascot(photo, box, name, pink):
     alpha_img = Image.fromarray((body * 255).astype('uint8')).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(1.1))
     rgb = np.asarray(crop).copy()
     pink_px = mask & body
-    rgb[pink_px] = pink
+    rgb[pink_px] = BRAND_PINK
     img = Image.fromarray(rgb).convert('RGBA')
     img.putalpha(alpha_img)
     bbox = alpha_img.point(lambda v: 255 if v > 20 else 0).getbbox()
@@ -83,6 +86,25 @@ def wordmark(photo, box, name):
     img = img.resize((img.width * 2, img.height * 2), Image.LANCZOS)
     img.save(OUT / name)
     return img.size
+
+
+def partner_logo(path, name='avenir_logo.jpg', height=400):
+    from PIL import ImageChops
+    im = Image.open(path).convert('RGB')
+    px = im.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            r, g, b = px[x, y]
+            if r > 238 and g > 238 and b > 238:
+                px[x, y] = (255, 255, 255)
+    bg = Image.new('RGB', im.size, (255, 255, 255))
+    bbox = ImageChops.difference(im, bg).point(lambda v: 255 if v > 40 else 0).getbbox()
+    left, top, right, bottom = bbox
+    pad = int(0.04 * max(right - left, bottom - top))
+    crop = im.crop((max(0, left - pad), max(0, top - pad), min(im.width, right + pad), min(im.height, bottom + pad)))
+    width = round(crop.width * height / crop.height)
+    crop.resize((width, height), Image.LANCZOS).save(OUT / name, quality=92, optimize=True)
+    return (width, height)
 
 
 def sample_colors(front):
@@ -110,6 +132,8 @@ def main():
     print('mascot_front', mascot(front, (700, 340, 1140, 780), 'mascot_front.png', pink_front))
     print('mascot_back', mascot(back, (680, 600, 1180, 1140), 'mascot_back.png', pink_back))
     print('wordmark', wordmark(front, (400, 790, 1450, 970), 'wordmark.png'))
+    if len(sys.argv) > 3:
+        print('avenir_logo', partner_logo(sys.argv[3]))
     colors = sample_colors(front)
     colors['pink'] = '#%02x%02x%02x' % pink_front
     (OUT / 'colors.json').write_text(json.dumps(colors, indent=2))
