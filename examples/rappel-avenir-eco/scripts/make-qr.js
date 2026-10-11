@@ -2,17 +2,18 @@
 'use strict';
 
 /**
- * Génère les QR codes (SVG vectoriel pour l'imprimeur + PNG) d'une page de rappel.
+ * Génère les QR codes (SVG vectoriel pour l'imprimeur + PNG) de la page de rappel.
  *
- * Usage : node scripts/make-qr.js <url-de-base> [source ...] [--out dossier]
- * Exemple : node scripts/make-qr.js https://rappel.exemple.fr avenir-eco avenir-eco-rennes
+ * Usage : node scripts/make-qr.js <url-de-l-application> [source ...] [--out dossier]
+ * Exemple : node scripts/make-qr.js https://script.google.com/macros/s/XXXX/exec avenir-eco avenir-eco-rennes
  *
- * Sans source, génère « avenir-eco ». L'URL encodée est <url-de-base>/?src=<source>.
+ * Sans source, génère « avenir-eco ». L'URL encodée est <url-de-l-application>?src=<source>.
  */
 
 const fs = require('fs');
 const path = require('path');
-const { normalizeSource } = require('../lib/validate');
+
+const SOURCE_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
 function parseArgs(argv) {
   const positional = [];
@@ -25,19 +26,23 @@ function parseArgs(argv) {
       positional.push(argv[i]);
     }
   }
-  return { baseUrl: positional[0], sources: positional.slice(1), out };
+  return { appUrl: positional[0], sources: positional.slice(1), out };
 }
 
 async function main() {
-  const { baseUrl, sources, out } = parseArgs(process.argv.slice(2));
-  if (!baseUrl) {
-    process.stderr.write('Usage : node scripts/make-qr.js <url-de-base> [source ...] [--out dossier]\n');
+  const { appUrl, sources, out } = parseArgs(process.argv.slice(2));
+  if (!appUrl) {
+    process.stderr.write('Usage : node scripts/make-qr.js <url-de-l-application> [source ...] [--out dossier]\n');
     process.exit(1);
   }
 
-  const base = new URL(baseUrl);
-  if (base.protocol !== 'https:' && base.hostname !== 'localhost') {
+  const base = new URL(appUrl);
+  if (base.protocol !== 'https:') {
     process.stderr.write('Refus : l\'URL doit être en https:// (un QR imprimé ne doit pas pointer vers du http).\n');
+    process.exit(1);
+  }
+  if (base.hostname === 'script.google.com' && !base.pathname.endsWith('/exec')) {
+    process.stderr.write('Refus : utilisez l\'URL de déploiement qui se termine par /exec (pas /dev, réservée aux tests).\n');
     process.exit(1);
   }
 
@@ -50,13 +55,12 @@ async function main() {
   }
 
   fs.mkdirSync(out, { recursive: true });
-  for (const raw of sources.length > 0 ? sources : ['avenir-eco']) {
-    const source = normalizeSource(raw);
-    if (source === 'direct' && raw !== 'direct') {
-      process.stderr.write(`Source invalide ignorée : « ${raw} » (minuscules, chiffres et tirets, 40 caractères max).\n`);
+  for (const source of sources.length > 0 ? sources : ['avenir-eco']) {
+    if (!SOURCE_RE.test(source)) {
+      process.stderr.write(`Source invalide ignorée : « ${source} » (minuscules, chiffres et tirets, 40 caractères max).\n`);
       continue;
     }
-    const target = new URL('/', base);
+    const target = new URL(base);
     target.searchParams.set('src', source);
     const url = target.toString();
     // Niveau M + marge de 4 modules (zone de silence imposée par la norme) : fiable même imprimé petit.

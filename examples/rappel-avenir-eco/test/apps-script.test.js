@@ -1,0 +1,296 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { createGoogleEnvironment } = require('../scripts/gas-harness');
+
+/** Environnement prêt à l'emploi : setup() exécuté, Sheet créé. */
+function ready(options) {
+  const gas = createGoogleEnvironment(options);
+  gas.call('setup');
+  return gas;
+}
+
+const lead = (extra = {}) => ({
+  firstName: 'Julie', lastName: 'Martin', phone: '06 12 34 56 78', email: 'julie@example.test',
+  slot: 'afternoon', consent: true, source: 'avenir-eco', website: '', ...extra
+});
+
+const mailsTo = (gas, address) => gas.state.sent.filter(m => m.to.split(',').includes(address));
+
+// --- validation -------------------------------------------------------------
+
+test('normalizePhone accepte les formats français et étrangers plausibles', () => {
+  const gas = createGoogleEnvironment();
+  for (const [input, expected] of [
+    ['06 12 34 56 78', '+33612345678'], ['06.12.34.56.78', '+33612345678'],
+    ['+33 6 12 34 56 78', '+33612345678'], ['0033612345678', '+33612345678'],
+    ['+32 470 12 34 56', '+32470123456']
+  ]) assert.equal(gas.call('normalizePhone', input), expected, input);
+});
+
+test('normalizePhone refuse les numéros invalides', () => {
+  const gas = createGoogleEnvironment();
+  for (const bad of ['', '123', '0012', '06 12 34', 'abcdefghij', '+330612345678', null, 42]) {
+    assert.equal(gas.call('normalizePhone', bad), null, `devrait refuser ${bad}`);
+  }
+});
+
+test('formatPhone met en forme un numéro français', () => {
+  const gas = createGoogleEnvironment();
+  assert.equal(gas.call('formatPhone', '+33685740141'), '06 85 74 01 41');
+  assert.equal(gas.call('formatPhone', '+32470123456'), '+32470123456');
+});
+
+test('validateLead accepte une demande minimale et normalise les champs', () => {
+  const gas = createGoogleEnvironment();
+  const result = gas.call('validateLead', { firstName: ' Ju\nlie\u0000 ', phone: '06 12 34 56 78', consent: true, slot: 'hack', email: ' Julie@Exemple.FR ' });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.value, {
+    firstName: 'Ju lie', lastName: '', phone: '+33612345678', email: 'julie@exemple.fr', slot: 'asap', source: 'direct'
+  });
+});
+
+test('validateLead exige prénom, téléphone valide et consentement (booléen true uniquement)', () => {
+  const gas = createGoogleEnvironment();
+  const result = gas.call('validateLead', { firstName: '  ', phone: '12', consent: false });
+  assert.deepEqual(Object.keys(result.errors).sort(), ['consent', 'firstName', 'phone']);
+  for (const consent of ['true', 1, 'on', undefined]) {
+    assert.equal(gas.call('validateLead', { firstName: 'A', phone: '0612345678', consent }).ok, false);
+  }
+  assert.equal(gas.call('validateLead', null).ok, false);
+  assert.equal(gas.call('validateLead', { firstName: 'A', phone: '0612345678', consent: true, email: 'pas-un-email' }).errors.email !== undefined, true);
+});
+
+test('normalizeSource ne garde que des slugs sûrs', () => {
+  const gas = createGoogleEnvironment();
+  assert.equal(gas.call('normalizeSource', 'Avenir-Eco'), 'avenir-eco');
+  for (const bad of ['<script>', '../etc', undefined, 'a'.repeat(41)]) assert.equal(gas.call('normalizeSource', bad), 'direct');
+});
+
+// --- traitement d'une demande ----------------------------------------------
+
+test('un lead Avenir Eco est écrit dans le Sheet et notifie le conseiller ET le partenaire', () => {
+  const gas = ready();
+  assert.deepEqual(gas.call('submitCallback', lead()), { ok: true });
+
+  const [header, row] = gas.leadsSheet().rows;
+  assert.equal(header[0], 'Reçu le');
+  assert.equal(row[1], 'Julie');
+  assert.equal(row[3], '+33612345678');
+  assert.equal(row[5], 'Cet après-midi (14h–17h)');
+  assert.equal(row[7], 'avenir-eco');
+  assert.deepEqual([row[8], row[9]], ['sent', 'sent']);
+  assert.match(row[0], /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/);
+
+  const owner = mailsTo(gas, 'allan@example.test')[0];
+  const partner = mailsTo(gas, 'contact@avenir.test')[0];
+  assert.match(owner.body, /06 12 34 56 78/);
+  assert.equal(owner.replyTo, 'julie@example.test');
+  assert.match(partner.subject, /Nouveau lead/);
+  assert.equal(partner.replyTo, 'allan@example.test');
+});
+
+test('le partenaire ne reçoit ni téléphone ni e-mail ni nom du client par défaut', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead());
+  const partner = mailsTo(gas, 'contact@avenir.test')[0];
+  for (const part of [partner.body, partner.htmlBody]) assert.doesNotMatch(part, /06 12 34 56 78|julie@example\.test|Martin/);
+  assert.match(partner.body, /Julie/);
+});
+
+test('PARTNER_SHARE_CONTACT=1 ajoute téléphone et e-mail dans le mail du partenaire', () => {
+  const gas = ready({ props: { PARTNER_SHARE_CONTACT: '1' } });
+  gas.call('submitCallback', lead());
+  assert.match(mailsTo(gas, 'contact@avenir.test')[0].body, /06 12 34 56 78/);
+});
+
+test('plusieurs adresses partenaire sont toutes destinataires du même message', () => {
+  const gas = ready({ props: { AVENIR_ECO_EMAIL: 'a@avenir.test, b@avenir.test' } });
+  gas.call('submitCallback', lead());
+  assert.equal(gas.state.sent.find(m => m.to.includes('a@avenir.test')).to, 'a@avenir.test,b@avenir.test');
+});
+
+test('une source sans lien partenaire ne notifie pas Avenir Eco (et « avenir-economie » non plus)', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead({ source: 'direct', phone: '0611111111' }));
+  gas.call('submitCallback', lead({ source: 'avenir-economie', phone: '0622222222' }));
+  gas.call('submitCallback', lead({ source: 'avenir-eco-rennes', phone: '0633333333' }));
+  assert.equal(mailsTo(gas, 'contact@avenir.test').length, 1);
+  assert.equal(mailsTo(gas, 'allan@example.test').length, 3);
+});
+
+test('le contenu saisi est échappé dans le HTML des e-mails', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead({ firstName: '<img src=x onerror=alert(1)>' }));
+  const html = gas.state.sent.map(m => m.htmlBody).join('');
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /&lt;img src=x/);
+});
+
+test('une valeur du type « =1+1 » est écrite dans une cellule au format texte (jamais évaluée)', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead({ firstName: '=HYPERLINK("http://x")' }));
+  const sheet = gas.leadsSheet();
+  assert.equal(sheet.rows[1][1], '=HYPERLINK("http://x")');
+  assert.equal(sheet.formats[1], '@');
+});
+
+test('le champ piège donne un faux succès sans rien enregistrer ni envoyer', () => {
+  const gas = ready();
+  assert.deepEqual(gas.call('submitCallback', lead({ website: 'http://spam.test' })), { ok: true });
+  assert.equal(gas.leadsSheet().rows.length, 1);
+  assert.equal(gas.state.sent.length, 0);
+});
+
+test('une demande invalide renvoie les erreurs par champ sans rien envoyer', () => {
+  const gas = ready();
+  const result = gas.call('submitCallback', lead({ phone: '12', consent: false }));
+  assert.equal(result.ok, false);
+  assert.deepEqual(Object.keys(result.errors).sort(), ['consent', 'phone']);
+  assert.equal(gas.state.sent.length, 0);
+});
+
+test('un double envoi du même numéro dans les 5 minutes ne crée qu\'un lead', () => {
+  const gas = ready();
+  assert.equal(gas.call('submitCallback', lead()).ok, true);
+  assert.equal(gas.call('submitCallback', lead()).ok, true);
+  assert.equal(gas.leadsSheet().rows.length, 2);
+  assert.equal(mailsTo(gas, 'allan@example.test').length, 1);
+});
+
+test('plafond anti-flood : la 31e demande de la tranche de 10 minutes est refusée', () => {
+  const gas = ready();
+  for (let i = 0; i < 30; i += 1) {
+    const phone = `06${String(10000000 + i)}`;
+    assert.equal(gas.call('submitCallback', lead({ phone })).ok, true, `demande ${i + 1}`);
+  }
+  const refused = gas.call('submitCallback', lead({ phone: '0699999999' }));
+  assert.equal(refused.ok, false);
+  assert.match(refused.error, /Trop de demandes/);
+});
+
+// --- pannes -----------------------------------------------------------------
+
+test('si le mail du partenaire échoue, le lead est gardé, le client a un succès et le statut est noté', () => {
+  const gas = ready({ failMailFor: m => m.to.includes('contact@avenir.test') });
+  assert.equal(gas.call('submitCallback', lead()).ok, true);
+  const row = gas.leadsSheet().rows[1];
+  assert.deepEqual([row[8], row[9]], ['sent', 'failed']);
+  assert.equal(gas.state.logs.some(([level]) => level === 'error'), true);
+});
+
+test('si le Sheet est inaccessible mais que le mail au conseiller part, c\'est un succès', () => {
+  const gas = ready();
+  gas.state.failSheet = true;
+  assert.equal(gas.call('submitCallback', lead()).ok, true);
+  assert.equal(mailsTo(gas, 'allan@example.test').length, 1);
+});
+
+test('si le Sheet ET le mail au conseiller échouent : erreur claire pour le client', () => {
+  const gas = ready({ failMailFor: () => true });
+  gas.state.failSheet = true;
+  const result = gas.call('submitCallback', lead());
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Appelez-moi/);
+});
+
+test('quota d\'e-mails épuisé : lead enregistré, statut « failed », client informé du succès', () => {
+  const gas = ready({ quota: 0 });
+  assert.equal(gas.call('submitCallback', lead()).ok, true);
+  assert.deepEqual([gas.leadsSheet().rows[1][8], gas.leadsSheet().rows[1][9]], ['failed', 'failed']);
+});
+
+test('adresse partenaire absente : lead enregistré, statut « no-address », pas d\'erreur', () => {
+  const gas = ready({ props: { AVENIR_ECO_EMAIL: '' } });
+  assert.equal(gas.call('submitCallback', lead()).ok, true);
+  assert.equal(gas.leadsSheet().rows[1][9], 'no-address');
+});
+
+test('submitCallback ne lève jamais d\'exception vers la page (setup non lancé)', () => {
+  const gas = createGoogleEnvironment();
+  assert.equal(gas.call('submitCallback', lead()).ok, true, 'le mail au conseiller suffit');
+  const broken = createGoogleEnvironment({ failMailFor: () => true });
+  assert.equal(broken.call('submitCallback', lead()).ok, false);
+});
+
+// --- installation et maintenance ------------------------------------------------
+
+test('setup() crée le Sheet une seule fois et refuse un OWNER_EMAIL manquant', () => {
+  const gas = createGoogleEnvironment();
+  gas.call('setup');
+  const id = gas.state.props.SHEET_ID;
+  assert.ok(id);
+  assert.equal(gas.leadsSheet().name, 'Leads');
+  assert.equal(gas.leadsSheet().rows[0].length, 11);
+  gas.call('setup');
+  assert.equal(gas.state.props.SHEET_ID, id);
+  assert.equal(gas.state.spreadsheets.size, 1);
+
+  const empty = createGoogleEnvironment({ props: { OWNER_EMAIL: '' } });
+  assert.throws(() => empty.call('setup'), /OWNER_EMAIL/);
+});
+
+test('purgeOldLeads supprime les leads de plus de 12 mois et les lignes illisibles', () => {
+  const gas = ready();
+  const sheet = gas.leadsSheet();
+  const recent = new Date(Date.now() - 30 * 86400000).toISOString();
+  const old = new Date(Date.now() - 400 * 86400000).toISOString();
+  sheet.rows.push([old, 'Vieux'], [recent, 'Récent'], ['pas une date', 'Illisible']);
+  assert.equal(gas.call('purgeOldLeads'), 2);
+  assert.deepEqual(sheet.rows.map(r => r[1]), ['Prénom', 'Récent']);
+});
+
+test('installPurgeTrigger est idempotent', () => {
+  const gas = ready();
+  gas.call('installPurgeTrigger');
+  gas.call('installPurgeTrigger');
+  assert.equal(gas.state.triggers.length, 1);
+  assert.deepEqual(gas.state.triggers[0].spec, { everyDays: 1, atHour: 3 });
+});
+
+test('sendTestEmails envoie des mails [TEST] au conseiller et au partenaire', () => {
+  const gas = ready();
+  gas.call('sendTestEmails');
+  assert.equal(mailsTo(gas, 'allan@example.test')[0].subject.startsWith('[TEST]'), true);
+  assert.equal(mailsTo(gas, 'contact@avenir.test')[0].subject.startsWith('[TEST]'), true);
+});
+
+test('les dates des e-mails sont en français, fuseau Paris', () => {
+  const gas = createGoogleEnvironment();
+  const mail = gas.call('buildOwnerMail', {
+    firstName: 'A', lastName: '', phone: '+33612345678', email: '', slot: 'asap', source: 'direct',
+    createdAt: '2026-10-11T12:37:00+02:00'
+  }, null);
+  assert.match(mail.text, /Reçu le : dimanche 11 octobre 2026 à 12:37/);
+});
+
+// --- page ---------------------------------------------------------------------
+
+test('la page contient « Me faire rappeler », le lien vCard direct et plus rien d\'Octopus-annexe', () => {
+  const gas = createGoogleEnvironment();
+  const page = gas.page('avenir-eco');
+  assert.equal(page.title, 'Octopus Energy · Allan Fix');
+  assert.equal(page.meta.viewport, 'width=device-width, initial-scale=1');
+  assert.match(page.html, /Me faire rappeler/);
+  assert.match(page.html, /name="source" value="avenir-eco"/);
+  assert.match(page.html, /href="https:\/\/api\.vkard\.io\/vcf\/serve\/44146dc1-7140-4653-b44b-bc7b1e1e5289\/627b0e5c74"/);
+  for (const banned of [/chèque énergie/i, /fan club/i, /je recommande/i, />\s*App\s*</, /typeform/i, /cagnotte/i, /40 €/, /<\?/]) {
+    assert.doesNotMatch(page.html, banned);
+  }
+});
+
+test('tous les liens de la page ont une cible compatible avec le bac à sable (_top ou _blank)', () => {
+  const gas = createGoogleEnvironment();
+  const { html } = gas.page();
+  assert.match(html, /<base target="_top">/);
+  for (const [tag] of html.matchAll(/<a\s[^>]*>/g)) assert.match(tag, /target="_(top|blank)"/, tag);
+});
+
+test('un src malveillant est neutralisé et VCARD_URL remplace le lien par défaut', () => {
+  const gas = createGoogleEnvironment({ props: { VCARD_URL: 'https://exemple.test/ma-fiche.vcf' } });
+  const { html } = gas.page('"><script>alert(1)</script>');
+  assert.match(html, /name="source" value="direct"/);
+  assert.doesNotMatch(html, /<script>alert/);
+  assert.match(html, /href="https:\/\/exemple\.test\/ma-fiche\.vcf"/);
+});

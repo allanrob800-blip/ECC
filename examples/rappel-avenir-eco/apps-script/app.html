@@ -1,4 +1,4 @@
-/* global document */
+<script>
 (function () {
   'use strict';
 
@@ -13,6 +13,7 @@
   mascot.addEventListener('error', function () { mascot.hidden = true; });
 
   var FIELDS = ['firstName', 'phone', 'email', 'consent'];
+  var GENERIC_ERROR = 'Une erreur est survenue. Réessayez ou appelez-moi directement.';
 
   function setError(name, message) {
     var node = document.getElementById('err-' + name);
@@ -46,6 +47,11 @@
     return errors;
   }
 
+  function finish() {
+    submit.disabled = false;
+    submit.textContent = 'Me faire rappeler';
+  }
+
   form.addEventListener('submit', function (event) {
     event.preventDefault();
     clearErrors();
@@ -70,32 +76,24 @@
     submit.disabled = true;
     submit.textContent = 'Envoi en cours…';
 
-    fetch('/api/callback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    })
-      .then(function (response) {
-        return response.json().catch(function () { return {}; }).then(function (body) {
-          return { status: response.status, body: body };
-        });
-      })
-      .then(function (result) {
-        if (result.status === 201) {
+    google.script.run
+      .withSuccessHandler(function (result) {
+        finish();
+        if (result && result.ok) {
           formPanel.hidden = true;
           successPanel.hidden = false;
           successPanel.focus();
-          return;
+        } else if (result && result.errors) {
+          showErrors(result.errors);
+        } else {
+          formError.textContent = (result && result.error) || GENERIC_ERROR;
         }
-        if (result.body.errors) showErrors(result.body.errors);
-        else formError.textContent = result.body.error || 'Une erreur est survenue. Réessayez ou appelez-moi directement.';
       })
-      .catch(function () {
+      .withFailureHandler(function () {
+        finish();
         formError.textContent = 'Connexion impossible. Vérifiez votre réseau ou appelez-moi directement.';
       })
-      .then(function () {
-        submit.disabled = false;
-        submit.textContent = 'Me faire rappeler';
-      });
+      .submitCallback(data);
   });
 })();
+</script>
