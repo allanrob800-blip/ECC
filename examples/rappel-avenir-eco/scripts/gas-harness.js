@@ -77,6 +77,9 @@ function createSheet(state) {
     getLastRow: () => sheet.rows.length,
     setName(name) { sheet.name = name; return sheet; },
     setFrozenRows() { return sheet; },
+    insertColumnBefore(n) {
+      sheet.rows.forEach(row => { if (row) row.splice(n - 1, 0, ''); });
+    },
     deleteRow(n) { sheet.rows.splice(n - 1, 1); sheet.formats.splice(n - 1, 1); },
     getRange(row, col, numRows = 1, numCols = 1) {
       if (state.failSheet) throw new Error('Feuille inaccessible');

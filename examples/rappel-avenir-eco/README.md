@@ -23,6 +23,14 @@ Les images (mascotte, logo « octopus energy », logo du partenaire) sont jointe
 
 **Photo de profil** : l'avatar d'un e-mail dans Gmail est la photo du compte Google d'envoi, pas du code. Pour y afficher la mascotte, utilisez un compte Google dédié au service et mettez-y la mascotte comme photo de profil. Gmail affiche en général cet avatar ; Outlook et Apple Mail montrent souvent une initiale.
 
+## Conseiller Avenir Eco cité par le client
+
+Sur les QR Avenir Eco, un choix facultatif « Un conseiller Avenir Eco vous en a parlé ? » propose les prénoms de la liste, « Un autre conseiller » et « Non / je ne sais plus » (par défaut). Le prénom choisi apparaît dans le Sheet (colonne « Conseiller cité »), dans votre e-mail (« A échangé avec ») et dans celui du partenaire (« Conseiller cité »). Rien n'est affiché sur un accès direct.
+
+La liste par défaut est Nicolas, Thierry, Julien. Pour la changer sans toucher au code, ajoutez la propriété du script `AVENIR_ECO_REPS` (prénoms séparés par des virgules, 8 au maximum). Le serveur n'accepte que ces prénoms : toute autre valeur est ignorée.
+
+Si `setup` est relancé sur un Sheet créé avant cette fonction, il ajoute la colonne manquante sans perdre les leads.
+
 ## Mise en ligne, pas à pas
 
 Les écrans de Google changent parfois de libellé : suivez l'esprit des étapes.

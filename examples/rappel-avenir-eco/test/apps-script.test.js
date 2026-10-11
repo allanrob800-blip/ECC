@@ -80,7 +80,7 @@ test('un lead Avenir Eco est écrit dans le Sheet et notifie le conseiller ET le
   assert.equal(row[3], '+33612345678');
   assert.equal(row[5], 'Cet après-midi (14h–17h)');
   assert.equal(row[7], 'avenir-eco');
-  assert.deepEqual([row[8], row[9]], ['sent', 'sent']);
+  assert.deepEqual([row[9], row[10]], ['sent', 'sent']);
   assert.match(row[0], /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/);
 
   const owner = mailsTo(gas, 'allan@example.test')[0];
@@ -176,7 +176,7 @@ test('si le mail du partenaire échoue, le lead est gardé, le client a un succ�
   const gas = ready({ failMailFor: m => m.to.includes('contact@avenir.test') });
   assert.equal(gas.call('submitCallback', lead()).ok, true);
   const row = gas.leadsSheet().rows[1];
-  assert.deepEqual([row[8], row[9]], ['sent', 'failed']);
+  assert.deepEqual([row[9], row[10]], ['sent', 'failed']);
   assert.equal(gas.state.logs.some(([level]) => level === 'error'), true);
 });
 
@@ -198,13 +198,13 @@ test('si le Sheet ET le mail au conseiller échouent : erreur claire pour le cli
 test('quota d\'e-mails épuisé : lead enregistré, statut « failed », client informé du succès', () => {
   const gas = ready({ quota: 0 });
   assert.equal(gas.call('submitCallback', lead()).ok, true);
-  assert.deepEqual([gas.leadsSheet().rows[1][8], gas.leadsSheet().rows[1][9]], ['failed', 'failed']);
+  assert.deepEqual([gas.leadsSheet().rows[1][9], gas.leadsSheet().rows[1][10]], ['failed', 'failed']);
 });
 
 test('adresse partenaire absente : lead enregistré, statut « no-address », pas d\'erreur', () => {
   const gas = ready({ props: { AVENIR_ECO_EMAIL: '' } });
   assert.equal(gas.call('submitCallback', lead()).ok, true);
-  assert.equal(gas.leadsSheet().rows[1][9], 'no-address');
+  assert.equal(gas.leadsSheet().rows[1][10], 'no-address');
 });
 
 test('submitCallback ne lève jamais d\'exception vers la page (setup non lancé)', () => {
@@ -222,7 +222,7 @@ test('setup() crée le Sheet une seule fois et refuse un OWNER_EMAIL manquant', 
   const id = gas.state.props.SHEET_ID;
   assert.ok(id);
   assert.equal(gas.leadsSheet().name, 'Leads');
-  assert.equal(gas.leadsSheet().rows[0].length, 11);
+  assert.equal(gas.leadsSheet().rows[0].length, 12);
   gas.call('setup');
   assert.equal(gas.state.props.SHEET_ID, id);
   assert.equal(gas.state.spreadsheets.size, 1);
@@ -483,4 +483,109 @@ test('tout ce qui vient du client est échappé dans les e-mails (nom, e-mail)',
     assert.doesNotMatch(message.htmlBody, /<img src=x|<script>x/);
   }
   assert.match(ownerOf(gas).htmlBody, /&lt;img src=x/);
+});
+
+// --- conseiller Avenir Eco cité par le client (facultatif) ---------------------------
+
+const advisorChips = html => [...html.matchAll(/<input type="radio" name="advisor" value="([^"]*)"/g)].map(m => m[1]);
+
+test('sur un QR Avenir Eco : le champ propose Nicolas, Thierry, Julien, « Un autre conseiller » et « Non », ce dernier par défaut', () => {
+  const { html } = createGoogleEnvironment().page('avenir-eco');
+  assert.deepEqual(advisorChips(html), ['Nicolas', 'Thierry', 'Julien', 'autre', '']);
+  assert.match(html, /Un conseiller Avenir Eco vous en a parlé \?/);
+  assert.match(html, /<input type="radio" name="advisor" value="" checked>/);
+});
+
+test('accès direct ou autre source : aucun champ « conseiller »', () => {
+  for (const src of [undefined, 'direct', 'autre-stand']) {
+    assert.deepEqual(advisorChips(createGoogleEnvironment().page(src).html), [], `src=${src}`);
+  }
+});
+
+test('AVENIR_ECO_REPS remplace la liste ; doublons, vides et mot réservé « autre » écartés, noms échappés', () => {
+  const gas = createGoogleEnvironment({ props: { AVENIR_ECO_REPS: ' Marc, sophie ,Marc,, AUTRE, <b>Léa</b> ' } });
+  const html = gas.page('avenir-eco').html;
+  assert.deepEqual(advisorChips(html), ['Marc', 'sophie', '&lt;b&gt;Léa&lt;/b&gt;', 'autre', '']);
+  assert.doesNotMatch(html, /<b>Léa<\/b>/);
+});
+
+test('liste vide dans AVENIR_ECO_REPS : retour à la liste par défaut', () => {
+  const gas = createGoogleEnvironment({ props: { AVENIR_ECO_REPS: ' , ,' } });
+  assert.deepEqual(advisorChips(gas.page('avenir-eco').html), ['Nicolas', 'Thierry', 'Julien', 'autre', '']);
+});
+
+test('conseiller choisi : écrit dans le Sheet, cité dans l\'e-mail du conseiller et dans celui du partenaire', () => {
+  const gas = ready();
+  assert.equal(gas.call('submitCallback', lead({ advisor: 'Thierry' })).ok, true);
+  const row = gas.leadsSheet().rows[1];
+  assert.equal(gas.leadsSheet().rows[0][8], 'Conseiller cité');
+  assert.equal(row[8], 'Thierry');
+  const owner = ownerOf(gas);
+  assert.match(owner.htmlBody, /A échangé avec<\/td>[^]*?Thierry \(Avenir Eco\)/);
+  assert.match(owner.body, /A échangé avec : Thierry \(Avenir Eco\)/);
+  const partner = partnerOf(gas);
+  assert.match(partner.htmlBody, /Conseiller cité<\/td>[^]*?>Thierry</);
+  assert.match(partner.htmlBody, /indique avoir échangé avec <b>Thierry<\/b>, de votre équipe/);
+  assert.match(partner.body, /indique avoir échangé avec Thierry, de votre équipe/);
+});
+
+test('« Un autre conseiller » : libellé neutre partout, sans nom inventé', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead({ advisor: 'autre' }));
+  assert.equal(gas.leadsSheet().rows[1][8], 'Un autre conseiller');
+  assert.match(ownerOf(gas).htmlBody, /Un conseiller Avenir Eco/);
+  assert.match(partnerOf(gas).htmlBody, /indique avoir échangé avec un conseiller, de votre équipe/);
+});
+
+test('sans conseiller cité : ni ligne ni phrase supplémentaire dans les e-mails, cellule vide', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead({ advisor: '' }));
+  assert.equal(gas.leadsSheet().rows[1][8], '');
+  assert.doesNotMatch(ownerOf(gas).htmlBody + ownerOf(gas).body, /A échangé avec/);
+  assert.doesNotMatch(partnerOf(gas).htmlBody + partnerOf(gas).body, /Conseiller cité|indique avoir échangé/);
+});
+
+test('le conseiller cité est validé côté serveur : texte libre, nom hors liste et source directe sont ignorés', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead({ advisor: '<script>alert(1)</script>', phone: '0611111111' }));
+  gas.call('submitCallback', lead({ advisor: 'Marc', phone: '0622222222' }));
+  gas.call('submitCallback', lead({ advisor: 'Thierry', source: 'direct', phone: '0633333333' }));
+  gas.call('submitCallback', lead({ advisor: { nom: 'Thierry' }, phone: '0644444444' }));
+  const rows = gas.leadsSheet().rows.slice(1);
+  assert.deepEqual(rows.map(r => r[8]), ['', '', '', '']);
+  assert.doesNotMatch(gas.state.sent.map(m => m.htmlBody).join(''), /<script>alert|A échangé avec|Conseiller cité/);
+});
+
+test('un conseiller cité ne change pas ce que reçoit le partenaire : toujours aucune coordonnée du client', () => {
+  const gas = ready();
+  gas.call('submitCallback', lead({ advisor: 'Julien' }));
+  const partner = partnerOf(gas);
+  for (const text of [partner.htmlBody, partner.body]) assert.doesNotMatch(text, /06 12 34 56 78|julie@example\.test|Martin/);
+});
+
+test('page : le choix du conseiller est envoyé avec le formulaire', () => {
+  const { html } = createGoogleEnvironment().page('avenir-eco');
+  assert.match(html, /advisor: form\.elements\.advisor \? form\.elements\.advisor\.value : ''/);
+});
+
+test('setup() met à jour un ancien Sheet : colonne « Conseiller cité » insérée, leads existants conservés, idempotent', () => {
+  const gas = createGoogleEnvironment();
+  const old = gas.context.SpreadsheetApp.create('ancien');
+  old.sheet.setName('Leads');
+  old.sheet.rows.push(
+    ['Reçu le', 'Prénom', 'Nom', 'Téléphone', 'E-mail', 'Créneau', 'Source', 'Partenaire', 'Mail conseiller', 'Mail partenaire', 'ID'],
+    ['2026-10-11T12:37:00+02:00', 'Julie', 'Martin', '+33612345678', '', 'Dès que possible', 'avenir-eco', 'avenir-eco', 'sent', 'sent', 'abc']
+  );
+  gas.state.props.SHEET_ID = old.getId();
+  gas.call('setup');
+  const [header, lead] = old.sheet.rows;
+  assert.equal(header.length, 12);
+  assert.equal(header[8], 'Conseiller cité');
+  assert.equal(header[9], 'Mail conseiller');
+  assert.deepEqual([lead[1], lead[8], lead[9], lead[10], lead[11]], ['Julie', '', 'sent', 'sent', 'abc']);
+  gas.call('setup');
+  assert.equal(old.sheet.rows[0].length, 12, 'une seconde exécution ne change rien');
+  assert.equal(gas.call('submitCallback', { firstName: 'Paul', phone: '0644444444', consent: true, source: 'avenir-eco', advisor: 'Julien' }).ok, true);
+  assert.equal(old.sheet.rows[2][8], 'Julien');
+  assert.deepEqual([old.sheet.rows[2][9], old.sheet.rows[2][10]], ['sent', 'sent']);
 });

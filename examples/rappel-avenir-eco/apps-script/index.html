@@ -55,6 +55,17 @@
           <label class="chip"><input type="radio" name="slot" value="evening"><span>Fin de journée<small>après 17h</small></span></label>
         </fieldset>
 
+        <? if (partner && partner.advisors.length > 0) { ?>
+        <fieldset class="slots advisors">
+          <legend>Un conseiller <?= partner.label ?> vous en a parlé ? <span class="opt">(facultatif)</span></legend>
+          <? partner.advisors.forEach(function (name) { ?>
+          <label class="chip"><input type="radio" name="advisor" value="<?= name ?>"><span><?= name ?></span></label>
+          <? }); ?>
+          <label class="chip"><input type="radio" name="advisor" value="autre"><span>Un autre conseiller</span></label>
+          <label class="chip chip-wide"><input type="radio" name="advisor" value="" checked><span>Non / je ne sais plus</span></label>
+        </fieldset>
+        <? } ?>
+
         <details class="more" id="more">
           <summary>Nom et e&#8209;mail <span class="opt">&nbsp;(facultatif)</span></summary>
           <div class="field">

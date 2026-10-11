@@ -11,6 +11,7 @@
  *   PARTNER_SHARE_CONTACT "1" pour inclure téléphone et e-mail du client dans le message au partenaire
  *   VCARD_URL             remplace le lien vkard par défaut (facultatif)
  *   AVENIR_ECO_LOGO_URL   remplace le logo d'Avenir Eco intégré (facultatif, https uniquement)
+ *   AVENIR_ECO_REPS       prénoms des conseillers Avenir Eco proposés au client, séparés par des virgules (facultatif)
  *   SHEET_ID              rempli automatiquement par setup()
  */
 
@@ -34,9 +35,18 @@ const PARTNERS = {
     emailProperty: 'AVENIR_ECO_EMAIL',
     // Logo intégré (fichier Logo.gs) ; la propriété AVENIR_ECO_LOGO_URL (https) peut le remplacer.
     logoProperty: 'AVENIR_ECO_LOGO_URL',
-    logoData: function () { return AVENIR_ECO_LOGO_DATA_URI; }
+    logoData: function () { return AVENIR_ECO_LOGO_DATA_URI; },
+    // Conseillers du partenaire que le client peut citer (facultatif). La propriété AVENIR_ECO_REPS
+    // (prénoms séparés par des virgules) remplace cette liste.
+    advisorsProperty: 'AVENIR_ECO_REPS',
+    defaultAdvisors: ['Nicolas', 'Thierry', 'Julien']
   }
 };
+
+/** Valeur envoyée par le formulaire pour « Un autre conseiller » (le client ne se souvient pas du nom). */
+const ADVISOR_OTHER = 'autre';
+const ADVISOR_OTHER_LABEL = 'Un autre conseiller';
+const MAX_ADVISORS = 8;
 
 const SLOTS = {
   asap: 'Dès que possible',
@@ -46,8 +56,8 @@ const SLOTS = {
 };
 
 const SHEET_NAME = 'Leads';
-const COLUMNS = ['Reçu le', 'Prénom', 'Nom', 'Téléphone', 'E-mail', 'Créneau', 'Source', 'Partenaire', 'Mail conseiller', 'Mail partenaire', 'ID'];
-const COL_MAIL_OWNER = 9;
+const COLUMNS = ['Reçu le', 'Prénom', 'Nom', 'Téléphone', 'E-mail', 'Créneau', 'Source', 'Partenaire', 'Conseiller cité', 'Mail conseiller', 'Mail partenaire', 'ID'];
+const COL_MAIL_OWNER = 10;
 
 const TIMEZONE = 'Europe/Paris';
 const RETENTION_DAYS = 365;
@@ -82,7 +92,7 @@ function doGet(e) {
   template.source = normalizeSource(e && e.parameter && e.parameter.src);
   // Logo et mention du partenaire seulement sur les QR de ce partenaire, jamais sur un accès direct.
   const partner = resolvePartner_(template.source);
-  template.partner = partner ? { label: partner.label, logoHtml: partnerLogoHtml_(partner) } : null;
+  template.partner = partner ? { label: partner.label, logoHtml: partnerLogoHtml_(partner), advisors: partnerAdvisors_(partner) } : null;
   return template.evaluate()
     .setTitle('Octopus Energy · ' + PROFILE.name)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -189,7 +199,8 @@ function processLead_(raw) {
   const lead = Object.assign({
     id: Utilities.getUuid(),
     createdAt: Utilities.formatDate(now, TIMEZONE, "yyyy-MM-dd'T'HH:mm:ssXXX"),
-    partner: partner ? partner.key : ''
+    partner: partner ? partner.key : '',
+    advisor: resolveAdvisor_(partner, raw.advisor)
   }, value);
 
   let row = 0;
@@ -230,6 +241,33 @@ function processLead_(raw) {
   // Marqué seulement ici : une demande échouée peut être renvoyée tout de suite.
   cache.put(dupKey, '1', DUPLICATE_WINDOW_SECONDS);
   return { ok: true };
+}
+
+/** Prénoms des conseillers du partenaire : propriété du script si elle existe, sinon la liste par défaut. */
+function partnerAdvisors_(partner) {
+  const clean = function (names) {
+    const seen = {};
+    return names.map(function (name) { return cleanText_(name, 30); }).filter(function (name) {
+      const key = name.toLowerCase();
+      if (!name || seen[key] || key === ADVISOR_OTHER) return false;
+      seen[key] = true;
+      return true;
+    }).slice(0, MAX_ADVISORS);
+  };
+  const custom = getProperty_(partner.advisorsProperty);
+  const fromProperty = custom ? clean(String(custom).split(',')) : [];
+  return fromProperty.length > 0 ? fromProperty : clean(partner.defaultAdvisors);
+}
+
+/**
+ * Conseiller cité par le client : uniquement un prénom de la liste (ou « autre »), et seulement sur une
+ * source partenaire. Toute autre valeur est ignorée : le champ ne peut pas servir à écrire du texte libre.
+ */
+function resolveAdvisor_(partner, raw) {
+  if (!partner || typeof raw !== 'string' || raw === '') return '';
+  if (raw === ADVISOR_OTHER) return ADVISOR_OTHER_LABEL;
+  const match = partnerAdvisors_(partner).filter(function (name) { return name === raw; });
+  return match.length > 0 ? match[0] : '';
 }
 
 function resolvePartner_(source) {
@@ -355,6 +393,19 @@ function button_(href, label, style) {
   return '<a href="' + href + '" style="display:block;text-decoration:none;font-weight:bold;text-align:center;' + style + '">' + label + '</a>';
 }
 
+/** « Marc (Avenir Eco) » ou « Un conseiller Avenir Eco » ; chaîne vide si le client n'a cité personne. */
+function advisorLabel_(lead, partnerLabel) {
+  if (!lead.advisor) return '';
+  return lead.advisor === ADVISOR_OTHER_LABEL ? 'Un conseiller ' + partnerLabel : lead.advisor + ' (' + partnerLabel + ')';
+}
+
+/** Fin de phrase de l'e-mail du partenaire : « , et indique avoir échangé avec Marc, de votre équipe ». */
+function advisorSentence_(lead, html) {
+  if (!lead.advisor) return '';
+  const who = lead.advisor === ADVISOR_OTHER_LABEL ? 'un conseiller' : (html ? '<b>' + escapeHtml_(lead.advisor) + '</b>' : lead.advisor);
+  return ', et indique avoir échangé avec ' + who + ', de votre équipe';
+}
+
 /** E-mail pour le conseiller : sombre, créneau en évidence, boutons Appeler / SMS / Écrire. */
 function buildOwnerMail(lead, partnerLabel) {
   const images = emailImages_(partnerLabel ? ['mascot', 'avenir'] : ['mascot']);
@@ -385,6 +436,11 @@ function buildOwnerMail(lead, partnerLabel) {
     ? '<tr><td style="color:#949FFF;font-size:12px;width:96px;padding:11px 0 4px;vertical-align:top;">E-mail</td>' +
       '<td style="color:#F0FFFF;font-size:14px;padding:11px 0 4px;"><a href="mailto:' + escapeHtml_(lead.email) + '" style="color:#F0FFFF;">' + escapeHtml_(lead.email) + '</a></td></tr>'
     : '';
+  const advisorLabel = advisorLabel_(lead, partnerLabel);
+  const advisorRow = advisorLabel
+    ? '<tr><td style="color:#949FFF;font-size:12px;width:96px;padding:4px 0;vertical-align:top;">A échangé avec</td>' +
+      '<td style="color:#F0FFFF;font-size:14px;padding:4px 0;">' + escapeHtml_(advisorLabel) + '</td></tr>'
+    : '';
   const secondary = lead.email
     ? '<td width="49%" align="center">' + button_(smsLink_(lead), '💬&nbsp; SMS prérempli', 'border:2px solid #60F0F8;color:#60F0F8;font-size:14px;padding:12px 6px;border-radius:12px;') + '</td>' +
       '<td width="2%">&nbsp;</td>' +
@@ -406,7 +462,7 @@ function buildOwnerMail(lead, partnerLabel) {
     '<div style="color:#F0FFFF;font-size:22px;font-weight:bold;line-height:1.2;">' + name + '</div>' +
     '<div style="padding:6px 0 16px;"><a href="tel:' + lead.phone + '" style="color:#60F0F8;font-size:25px;font-weight:bold;text-decoration:none;">' + phoneDisplay + '</a></div>' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #4B35A8;">' +
-    emailRow +
+    emailRow + advisorRow +
     '<tr><td style="color:#949FFF;font-size:12px;width:96px;padding:4px 0;vertical-align:top;">Origine</td><td style="color:#F0FFFF;font-size:14px;padding:4px 0;">' + escapeHtml_(origin) + '</td></tr>' +
     '<tr><td style="color:#949FFF;font-size:12px;padding:4px 0 14px;vertical-align:top;">Reçu le</td><td style="color:#F0FFFF;font-size:14px;padding:4px 0 14px;">' + escapeHtml_(receivedShort) + '</td></tr>' +
     '</table></td></tr>' +
@@ -421,6 +477,7 @@ function buildOwnerMail(lead, partnerLabel) {
     '',
     fullName_(lead) + ' : ' + phoneDisplay,
     lead.email ? 'E-mail : ' + lead.email : 'E-mail : non renseigné',
+    advisorLabel ? 'A échangé avec : ' + advisorLabel : null,
     'Origine : ' + origin,
     'Reçu le : ' + received,
     '',
@@ -428,7 +485,7 @@ function buildOwnerMail(lead, partnerLabel) {
   ];
   return {
     subject: subject,
-    text: lines.join('\n') + '\n',
+    text: lines.filter(function (line) { return line !== null; }).join('\n') + '\n',
     html: html,
     name: SENDER_NAME_OWNER,
     inlineImages: images
@@ -447,7 +504,9 @@ function buildPartnerMail(lead, partnerLabel, shareContact) {
   const subject = '📍 Un client de votre stand veut être rappelé · ' + lead.firstName;
   const slotLine = SLOT_BANNER[lead.slot].replace(' · ', ' (') + (SLOT_BANNER[lead.slot].indexOf(' · ') > -1 ? ')' : '');
 
-  const rows = [['Prénom', lead.firstName], ['Rappel souhaité', slotLine]];
+  const rows = [['Prénom', lead.firstName]];
+  if (lead.advisor) rows.push(['Conseiller cité', lead.advisor === ADVISOR_OTHER_LABEL ? 'Un autre conseiller' : lead.advisor]);
+  rows.push(['Rappel souhaité', slotLine]);
   if (shareContact) {
     rows.push(['Téléphone', formatPhone(lead.phone)]);
     if (lead.email) rows.push(['E-mail', lead.email]);
@@ -476,7 +535,7 @@ function buildPartnerMail(lead, partnerLabel, shareContact) {
     '<tr><td style="padding:26px 24px 8px;">' +
     '<div style="color:#5F7400;font-size:11px;font-weight:bold;letter-spacing:1.5px;">NOUVEAU LEAD DEPUIS VOTRE STAND</div>' +
     '<div style="color:#0B1D18;font-size:25px;font-weight:bold;line-height:1.2;padding:8px 0 10px;">Un client veut être rappelé</div>' +
-    '<div style="color:#33423D;font-size:15px;line-height:1.55;"><b>' + first + '</b> vient de laisser ses coordonnées en scannant le QR code de votre stand. <b>' + escapeHtml_(PROFILE.name) + '</b>, conseiller Octopus&nbsp;Energy, a été prévenu et rappellera ce client rapidement.</div></td></tr>' +
+    '<div style="color:#33423D;font-size:15px;line-height:1.55;"><b>' + first + '</b> vient de laisser ses coordonnées en scannant le QR code de votre stand' + advisorSentence_(lead, true) + '. <b>' + escapeHtml_(PROFILE.name) + '</b>, conseiller Octopus&nbsp;Energy, a été prévenu et rappellera ce client rapidement.</div></td></tr>' +
     '<tr><td style="padding:14px 24px 6px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F7EA;border-radius:12px;">' + rowsHtml + '</table></td></tr>' +
     '<tr><td style="padding:10px 24px 4px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="30" valign="top" style="color:#5F7400;font-size:20px;line-height:1.2;">✔</td>' +
     '<td style="color:#0B1D18;font-size:15px;line-height:1.5;"><b>Rien à faire de votre côté.</b><br><span style="color:#33423D;font-size:14px;">' + escapeHtml_(PROFILE.firstName) + ' s’occupe de tout. Une question sur ce lead ? Vous pouvez l’appeler directement.</span></td></tr></table></td></tr>' +
@@ -489,7 +548,7 @@ function buildPartnerMail(lead, partnerLabel, shareContact) {
   const lines = [
     'UN CLIENT DE VOTRE STAND ' + partnerLabel.toUpperCase() + ' VEUT ÊTRE RAPPELÉ',
     '',
-    lead.firstName + ' vient de laisser ses coordonnées en scannant le QR code de votre stand.',
+    lead.firstName + ' vient de laisser ses coordonnées en scannant le QR code de votre stand' + advisorSentence_(lead, false) + '.',
     PROFILE.name + ', conseiller Octopus Energy, a été prévenu et rappellera ce client rapidement. Rien à faire de votre côté.',
     ''
   ].concat(rows.map(function (row) { return row[0] + ' : ' + row[1]; })).concat([
@@ -538,7 +597,7 @@ function appendLead_(lead) {
     range.setNumberFormat('@');
     range.setValues([[
       lead.createdAt, lead.firstName, lead.lastName, lead.phone, lead.email,
-      SLOTS[lead.slot], lead.source, lead.partner, '', '', lead.id
+      SLOTS[lead.slot], lead.source, lead.partner, lead.advisor || '', '', '', lead.id
     ]]);
     return row;
   } finally {
@@ -550,7 +609,20 @@ function appendLead_(lead) {
 // Installation et maintenance (à lancer à la main depuis l'éditeur)
 // ---------------------------------------------------------------------------
 
-/** À lancer une fois : vérifie les réglages et crée le Google Sheet des leads. */
+/**
+ * Met à jour un Sheet créé avec l'ancienne disposition : ajoute la colonne « Conseiller cité » avant
+ * « Mail conseiller », sans toucher aux leads déjà enregistrés (leurs cellules glissent d'une colonne).
+ */
+function migrateSheet_(sheet) {
+  const header = sheet.getRange(1, 1, 1, COLUMNS.length).getValues()[0];
+  if (header[8] === 'Mail conseiller') {
+    sheet.insertColumnBefore(9);
+    sheet.getRange(1, 1, 1, COLUMNS.length).setValues([COLUMNS]).setFontWeight('bold');
+    console.log('Colonne « Conseiller cité » ajoutée au Sheet.');
+  }
+}
+
+/** À lancer une fois : vérifie les réglages et crée le Google Sheet des leads (ou le met à jour). */
 function setup() {
   if (parseEmails_(getProperty_('OWNER_EMAIL')).length === 0) {
     throw new Error('Propriété OWNER_EMAIL absente ou invalide (Paramètres du projet > Propriétés du script).');
@@ -558,7 +630,9 @@ function setup() {
   if (parseEmails_(getProperty_('AVENIR_ECO_EMAIL')).length === 0) {
     console.warn('AVENIR_ECO_EMAIL absente ou invalide : le partenaire ne sera pas prévenu.');
   }
-  if (!getProperty_('SHEET_ID')) {
+  if (getProperty_('SHEET_ID')) {
+    migrateSheet_(getSheet_());
+  } else {
     const spreadsheet = SpreadsheetApp.create('Leads · Rappel Avenir Eco');
     const sheet = spreadsheet.getSheets()[0];
     sheet.setName(SHEET_NAME);
