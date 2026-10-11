@@ -51,6 +51,19 @@ Pour l'impression :
 - L'URL Apps Script est longue, donc le QR est dense (57 modules). Il s'est décodé en test jusqu'à 2 cm de côté, mais prévoyez 3 cm ou plus et testez l'épreuve imprimée avec plusieurs téléphones.
 - Un QR par source si vous voulez distinguer plusieurs stands (`avenir-eco-rennes`, `avenir-eco-vitre`, etc.).
 
+## Présentoir imprimable
+
+Le dossier `display/` génère le présentoir au format 105 × 150 mm (portrait), avec 3 mm de fond perdu : recto avec le QR code, verso avec le numéro du conseiller.
+
+```bash
+python3 display/prepare_assets.py recto.jpg verso.jpg      # détoure la mascotte et le logo depuis les photos de l'ancien présentoir
+node display/build.js "https://script.google.com/.../exec?src=avenir-eco" --out sortie
+```
+
+`build.js` demande `playwright-core` (non installé par `npm install`, car il ne sert qu'à produire le PDF) et un Chromium. Il écrit `presentoir.pdf` (2 pages), `apercu-recto.png`, `apercu-verso.png` et `qr.svg`, et refuse un QR trop dense pour sa taille. Les images Octopus (mascotte, logo) ne sont pas versionnées : le dossier `display/assets/` est ignoré par git.
+
+Avant d'imprimer : ouvrez le lien du QR dans une fenêtre de navigation privée, sur un téléphone non connecté à un compte Octopus. S'il demande une connexion, personne d'autre que vous ne pourra l'ouvrir.
+
 ## Limites à connaître
 
 - **Bandeau Google** : « This application was created by a Google Apps Script user » s'affiche en haut de la page. Il n'existe pas de moyen officiel de l'enlever.

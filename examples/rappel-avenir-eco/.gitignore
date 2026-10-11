@@ -1,2 +1,5 @@
 qr/
 .env
+display/assets/
+display/out/
+display/.build.html
